@@ -3,10 +3,16 @@ import esphome.config_validation as cv
 
 from esphome.const import CONF_ID
 
-DEPENDENCIES = ["esp32"]
+
+DEPENDENCIES = [
+    "esp32"
+]
 
 
-ble_gateway_ns = cg.esphome_ns.namespace("ble_gateway")
+ble_gateway_ns = cg.esphome_ns.namespace(
+    "ble_gateway"
+)
+
 
 BLEGateway = ble_gateway_ns.class_(
     "BLEGateway",
@@ -14,11 +20,14 @@ BLEGateway = ble_gateway_ns.class_(
 )
 
 
+
 CONFIG_SCHEMA = cv.Schema(
     {
-        cv.GenerateID(): cv.declare_id(BLEGateway),
+        cv.GenerateID():
+            cv.declare_id(BLEGateway),
     }
 )
+
 
 
 async def to_code(config):
@@ -30,13 +39,4 @@ async def to_code(config):
     await cg.register_component(
         var,
         config
-    )
-
-    cg.add_library(
-        "ble_gateway",
-        None
-    )
-
-    cg.add_build_flag(
-        "-std=gnu++17"
     )
