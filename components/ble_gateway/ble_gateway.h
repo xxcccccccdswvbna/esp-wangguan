@@ -1,41 +1,34 @@
-import esphome.codegen as cg
-import esphome.config_validation as cv
+#pragma once
 
-from esphome.const import CONF_ID
+#include "esphome/core/component.h"
 
-
-DEPENDENCIES = [
-    "esp32"
-]
+#include <string>
+#include <vector>
 
 
-ble_gateway_ns = cg.esphome_ns.namespace(
-    "ble_gateway"
-)
+namespace esphome {
+namespace ble_gateway {
 
 
-BLEGateway = ble_gateway_ns.class_(
-    "BLEGateway",
-    cg.Component
-)
+class BLEGateway : public Component {
+
+ public:
+
+  void setup() override;
+
+  void loop() override;
+
+  void send_hex(std::string hex);
 
 
-CONFIG_SCHEMA = cv.Schema(
-    {
-        cv.GenerateID():
-        cv.declare_id(BLEGateway),
-    }
-)
+ private:
+
+  std::vector<uint8_t> hex_to_bytes(
+      const std::string &hex
+  );
+
+};
 
 
-
-async def to_code(config):
-
-    var = cg.new_Pvariable(
-        config[CONF_ID]
-    )
-
-    await cg.register_component(
-        var,
-        config
-    )
+}
+}
