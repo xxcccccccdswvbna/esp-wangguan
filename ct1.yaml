@@ -1,5 +1,5 @@
 esphome:
-  name: ct1
+  name: ct2
   friendly_name: CT1 BLE Gateway
 
 
