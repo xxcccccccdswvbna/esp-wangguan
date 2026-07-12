@@ -176,28 +176,18 @@ ESP_LOGI(
 
 
 
-    esp_ble_adv_data_t adv={};
-
-
-    adv.set_scan_rsp=false;
-
-    adv.include_name=false;
-
-    adv.include_txpower=false;
-
-
-    adv.manufacturer_len =
-        manu.size();
-
-
-    adv.p_manufacturer_data =
-        manu.data();
-
-
-
-    esp_ble_gap_config_adv_data(
-        &adv
+esp_err_t err =
+    esp_ble_gap_config_adv_data_raw(
+        data.data(),
+        data.size()
     );
+
+ESP_LOGI(
+    TAG,
+    "RAW ADV len=%d err=%d",
+    data.size(),
+    err
+);
 
 
 
