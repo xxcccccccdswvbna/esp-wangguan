@@ -1,0 +1,344 @@
+esphome:
+  name: ct1
+  friendly_name: CT1 BLE Gateway
+
+  includes:
+    - ble_raw_gateway.h
+
+esp32:
+  board: esp32dev
+  flash_size: 4MB
+
+  framework:
+    type: esp-idf
+
+    sdkconfig_options:
+      CONFIG_FREERTOS_UNICORE: y
+
+logger:
+  baud_rate: 0
+
+wifi:
+  ssid: "CC"
+  password: "chen1122"
+
+  fast_connect: true
+  power_save_mode: none
+
+  ap:
+    ssid: "CT1 Fallback"
+    password: "12345678"
+
+captive_portal:
+
+api:
+  reboot_timeout: 0s
+
+ota:
+  - platform: esphome
+
+# ======================
+# BLE接收
+# ======================
+
+esp32_ble:
+  io_capability: none
+
+esp32_ble_tracker:
+  scan_parameters:
+    interval: 320ms
+    window: 40ms
+    active: false
+
+  on_ble_advertise:
+    then:
+      - lambda: |-
+          std::string raw;
+          auto d = x.get_raw();
+
+          for(auto b:d)
+          {
+            char buf;
+            sprintf(buf,"%02X",b);
+            raw += buf;
+          }[[source_group_web_1]]
+
+          if(raw.length())
+          {
+            id(mqtt_client).publish(
+              "ct1/ble/receive",
+              raw
+            );
+          }
+
+# ======================
+# MQTT
+# ======================
+
+mqtt:
+  id: mqtt_client
+
+  
+  broker: "192.168.6.88"
+
+  on_connect:
+    then:
+      - lambda: |-
+          id(mqtt_client).publish(
+            "ct1/status",
+            "online"
+          );
+
+  on_disconnect:
+    then:
+      - lambda: |-
+          id(mqtt_client).publish(
+            "ct1/status",
+            "offline"
+          );
+
+  # HA发送任意BLE包
+  on_message:
+    - topic: ct1/ble/send
+      then:
+        - lambda: |-
+            ble_send_raw_hex(
+              x.c_str()
+            );
+
+# ======================
+# 物理按键
+# ======================
+
+# 【全局变量】用于保存按键状态和安全模式计数
+globals:
+  - id: do_factory_reset
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  - id: safe_mode_tap_count
+    type: int
+    restore_value: no
+    initial_value: '0'
+
+binary_sensor:
+  # KEY1 GPIO34
+  - platform: gpio
+    id: key1
+    name: KEY1
+    pin:
+      number: GPIO34
+      inverted: true
+    filters:
+      - delayed_on: 20ms
+      - delayed_off: 20ms
+    on_multi_click:
+      # 长按8秒以上且按住KEY4 -> 恢复出厂设置并重启
+      - timing:
+          - ON for at least 8s
+        then:
+          - if:
+              condition:
+                binary_sensor.is_on: key4
+              then:
+                - delay: 500ms
+                - if:
+                    condition:
+                      binary_sensor.is_on: key4
+                    then:
+                      - lambda: 'id(do_factory_reset) = true;'
+                      - repeat:
+                          count: 5
+                          then:
+                            - light.toggle: white_led
+                            - delay: 100ms
+                      - lambda: 'App.reboot();'
+      # KEY1 长按1.5秒
+      - timing:
+          - ON for at least 1.5s
+        then:
+          - light.turn_on: blue_led
+          - delay: 200ms
+          - light.turn_off: blue_led
+          - homeassistant.event:
+              event: esphome.gateway_key
+              data:
+                key: "key1"
+                mode: "long"
+      # KEY1 双击
+      - timing:
+          - ON for at most 0.5s
+          - OFF for at most 0.3s
+          - ON for at most 0.5s
+          - OFF for at least 0.3s
+        then:
+          - light.turn_on: blue_led
+          - delay: 200ms
+          - light.turn_off: blue_led
+          - homeassistant.event:
+              event: esphome.gateway_key
+              data:
+                key: "key1"
+                mode: "double"
+      # KEY1 单击
+      - timing:
+          - ON for at most 0.5s
+          - OFF for at least 0.3s
+        then:
+          - light.turn_on: blue_led
+          - delay: 200ms
+          - light.turn_off: blue_led
+          - homeassistant.event:
+              event: esphome.gateway_key
+              data:
+                key: "key1"
+                mode: "single"
+
+  # KEY2 GPIO35
+  - platform: gpio
+    id: key2
+    name: KEY2
+    pin:
+      number: GPIO35
+      inverted: true
+    filters:
+      - delayed_on: 20ms
+      - delayed_off: 20ms
+    on_multi_click:
+      # KEY2 长按1.5秒
+      - timing:
+          - ON for at least 1.5s
+        then:
+          - light.turn_on: blue_led
+          - delay: 200ms
+          - light.turn_off: blue_led
+          - homeassistant.event:
+              event: esphome.gateway_key
+              data:
+                key: "key2"
+                mode: "long"
+      # KEY2 双击
+      - timing:
+          - ON for at most 0.5s
+          - OFF for at most 0.3s
+          - ON for at most 0.5s
+          - OFF for at least 0.3s
+        then:
+          - light.turn_on: blue_led
+          - delay: 200ms
+          - light.turn_off: blue_led
+          - homeassistant.event:
+              event: esphome.gateway_key
+              data:
+                key: "key2"
+                mode: "double"
+      # KEY2 单击
+      - timing:
+          - ON for at most 0.5s
+          - OFF for at least 0.3s
+        then:
+          - light.turn_on: blue_led
+          - delay: 200ms
+          - light.turn_off: blue_led
+          - homeassistant.event:
+              event: esphome.gateway_key
+              data:
+                key: "key2"
+                mode: "single"
+      # 连续快速点击5次进入安全模式
+      - lambda: 'id(safe_mode_tap_count)++;'
+      - if:
+          condition:
+            lambda: 'return id(safe_mode_tap_count) >= 5;'
+          then:
+            - lambda: 'id(safe_mode_tap_count) = 0;'
+            - repeat:
+                count: 8
+                then:
+                  - light.toggle: blue_led
+                  - delay: 150ms
+            - lambda: 'App.safe_reboot();'
+          else:
+            - delay: 5000ms
+            - lambda: 'id(safe_mode_tap_count) = 0;'
+
+  # KEY3 GPIO32
+  - platform: gpio
+    id: key3
+    name: KEY3
+    pin:
+      number: GPIO32
+      inverted: true
+    filters:
+      - delayed_on: 20ms
+      - delayed_off: 20ms
+    on_multi_click:
+      # KEY3 长按1.5秒
+      - timing:
+          - ON for at least 1.5s
+        then:
+          - light.turn_on: blue_led
+          - delay: 200ms
+          - light.turn_off: blue_led
+          - homeassistant.event:
+              event: esphome.gateway_key
+              data:
+                key: "key3"
+                mode: "long"
+      # KEY3 双击
+      - timing:
+          - ON for at most 0.5s
+          - OFF for at most 0.3s
+          - ON for at most 0.5s
+          - OFF for at least 0.3s
+        then:
+          - light.turn_on: blue_led
+          - delay: 200ms
+          - light.turn_off: blue_led
+          - homeassistant.event:
+              event: esphome.gateway_key
+              data:
+                key: "key3"
+                mode: "double"
+      # KEY3 单击
+      - timing:
+          - ON for at most 0.5s
+          - OFF for at least 0.3s
+        then:
+          - light.turn_on: blue_led
+          - delay: 200ms
+          - light.turn_off: blue_led
+          - homeassistant.event:
+              event: esphome.gateway_key
+              data:
+                key: "key3"
+                mode: "single"
+
+  # KEY4 GPIO33
+  - platform: gpio
+    id: key4
+    name: KEY4
+    pin:
+      number: GPIO33
+      inverted: true
+    filters:
+      - delayed_on: 20ms
+      - delayed_off: 20ms
+    on_multi_click:
+      # KEY4 长按1.5秒
+      - timing:
+          - ON for at least 1.5s
+        then:
+          - light.turn_on: blue_led
+          - delay: 200ms
+          - light.turn_off: blue_led
+          - homeassistant.event:
+              event: esphome.gateway_key
+              data:
+                key: "key4"
+                mode: "long"
+      # KEY4 双击
+      - timing:
+          - ON for at most 0.5s
+          - OFF for at most 0.3
+
