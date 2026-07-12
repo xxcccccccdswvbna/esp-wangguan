@@ -8,8 +8,6 @@ esphome:
 
 esp32:
   board: esp32dev
-  flash_size: 4MB
-
   framework:
     type: esp-idf
 
@@ -28,10 +26,6 @@ wifi:
   fast_connect: true
   power_save_mode: none
 
-  ap:
-    ssid: "CT1 Fallback"
-    password: "12345678"
-
 
 captive_portal:
 
@@ -45,75 +39,11 @@ ota:
 
 
 
-# ======================
-# BLE接收
-# ======================
-
-esp32_ble:
-
-  io_capability: none
-
-
-
-esp32_ble_tracker:
-
-  scan_parameters:
-
-    interval: 320ms
-    window: 40ms
-    active: false
-
-
-
-  on_ble_advertise:
-
-    then:
-
-      - lambda: |-
-
-          std::string raw;
-
-          auto d = x.get_raw();
-
-
-          for(auto b:d)
-          {
-
-            char buf[3];
-
-            sprintf(buf,"%02X",b);
-
-            raw += buf;
-
-          }
-
-
-          if(raw.length())
-          {
-
-            id(mqtt_client).publish(
-              "ct1/ble/receive",
-              raw
-            );
-
-          }
-
-
-
-
-
-# ======================
-# MQTT
-# ======================
-
 mqtt:
 
   id: mqtt_client
 
-
-  broker: "192.168.6.10"
-
-
+  broker: "192.168.6.88"
 
 
   on_connect:
@@ -129,26 +59,9 @@ mqtt:
 
 
 
-  on_disconnect:
-
-    then:
-
-      - lambda: |-
-
-          id(mqtt_client).publish(
-            "ct1/status",
-            "offline"
-          );
-
-
-
-  # HA发送任意BLE包
-
   on_message:
 
-
     - topic: ct1/ble/send
-
 
       then:
 
