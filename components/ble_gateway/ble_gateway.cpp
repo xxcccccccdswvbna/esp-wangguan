@@ -61,7 +61,7 @@ void BLEGateway::loop()
         {
 
             next_packet_time_ =
-                millis() + 100;
+                millis() + 300;
 
 
             waiting_next_packet_ = true;
@@ -76,18 +76,24 @@ void BLEGateway::loop()
      * 发送下一包
      */
 
-    if(
-        waiting_next_packet_ &&
-        millis() >= next_packet_time_
-    )
-    {
+if(
+    waiting_next_packet_ &&
+    millis() >= next_packet_time_
+)
+{
 
-        waiting_next_packet_ = false;
+    waiting_next_packet_ = false;
 
 
-        send_next_packet();
+    ESP_LOGI(
+        TAG,
+        "SEND NEXT PACKET"
+    );
 
-    }
+
+    send_next_packet();
+
+}
 
 
 }
