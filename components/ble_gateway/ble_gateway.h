@@ -12,13 +12,22 @@ namespace ble_gateway {
 
 class BLEGateway : public Component {
 
+
  public:
 
   void setup() override;
 
   void loop() override;
 
-  void send_hex(std::string hex);
+
+  void send_hex(
+      std::string hex
+  );
+
+
+  bool parse_status(
+      std::string hex
+  );
 
 
  private:
@@ -26,6 +35,7 @@ class BLEGateway : public Component {
   std::vector<uint8_t> hex_to_bytes(
       const std::string &hex
   );
+
 
 };
 
