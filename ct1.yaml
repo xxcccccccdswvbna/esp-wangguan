@@ -38,19 +38,20 @@ ota:
   - platform: esphome
 
 
+
 mqtt:
+
+  id: mqtt_client
 
   broker: "192.168.6.88"
 
-
-  id: mqtt_client
 
 
 external_components:
 
   - source:
       type: local
-      path: components
+      path: ./components
 
 
 
