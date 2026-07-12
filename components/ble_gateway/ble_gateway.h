@@ -11,7 +11,6 @@ namespace esphome {
 namespace ble_gateway {
 
 
-
 class BLEGateway : public Component {
 
 
@@ -26,12 +25,15 @@ class BLEGateway : public Component {
 
 
     /*
-     * MQTT调用
+     * MQTT入口
      *
-     * 输入完整BLE RAW包
+     * 支持：
      *
-     * 例如：
-     * 0201021BFFA806......
+     * 单包:
+     * HEX
+     *
+     * 多包:
+     * HEX|HEX|HEX
      */
     void send_hex(
         std::string hex
@@ -39,9 +41,6 @@ class BLEGateway : public Component {
 
 
 
-    /*
-     * 状态解析预留
-     */
     bool parse_status(
         std::string hex
     );
@@ -51,9 +50,6 @@ class BLEGateway : public Component {
  protected:
 
 
-    /*
-     * HEX转换BYTE
-     */
     std::vector<uint8_t>
     hex_to_bytes(
         const std::string &hex
@@ -64,17 +60,55 @@ class BLEGateway : public Component {
  private:
 
 
+
     /*
-     * 广播开始时间
+     * 当前广播状态
+     */
+    bool adv_running_{false};
+
+
+
+    /*
+     * 当前广播开始时间
      */
     uint32_t adv_start_time_{0};
 
 
 
     /*
-     * 当前是否正在广播
+     * 多包队列
      */
-    bool adv_running_{false};
+    std::vector<std::string> packet_queue_;
+
+
+
+    /*
+     * 当前等待时间
+     */
+    uint32_t next_packet_time_{0};
+
+
+
+    /*
+     * 是否等待下一包
+     */
+    bool waiting_next_packet_{false};
+
+
+
+    /*
+     * 发送单个RAW包
+     */
+    void send_raw_packet(
+        std::string packet
+    );
+
+
+
+    /*
+     * 发送队列下一包
+     */
+    void send_next_packet();
 
 
 
