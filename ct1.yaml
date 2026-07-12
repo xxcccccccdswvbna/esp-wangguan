@@ -76,17 +76,17 @@ mqtt:
 
 
 external_components:
-
   - source:
-
       type: local
-
       path: components
 
 
-
+esp32_ble_tracker:
+  scan_parameters:
+    interval: 320ms
+    window: 30ms
+    active: false
 
 
 ble_gateway:
-
   id: ct1_ble
