@@ -20,14 +20,12 @@ BLEGateway = ble_gateway_ns.class_(
 )
 
 
-
 CONFIG_SCHEMA = cv.Schema(
     {
         cv.GenerateID():
-            cv.declare_id(BLEGateway),
+        cv.declare_id(BLEGateway),
     }
 )
-
 
 
 async def to_code(config):
