@@ -25,11 +25,14 @@ void BLEGateway::setup()
 
 
 
+
+
 void BLEGateway::loop()
 {
 
+
     /*
-     * 广播发送完成后自动停止
+     * 停止当前广播
      */
 
     if(
@@ -49,9 +52,48 @@ void BLEGateway::loop()
             "BLE ADV STOP"
         );
 
+
+        /*
+         * 多包等待
+         */
+
+        if(!packet_queue_.empty())
+        {
+
+            next_packet_time_ =
+                millis() + 100;
+
+
+            waiting_next_packet_ = true;
+
+        }
+
     }
 
+
+
+    /*
+     * 发送下一包
+     */
+
+    if(
+        waiting_next_packet_ &&
+        millis() >= next_packet_time_
+    )
+    {
+
+        waiting_next_packet_ = false;
+
+
+        send_next_packet();
+
+    }
+
+
 }
+
+
+
 
 
 
@@ -85,7 +127,6 @@ BLEGateway::hex_to_bytes(
         i+1 < clean.length();
         i+=2
     )
-
     {
 
         uint8_t b =
@@ -110,8 +151,140 @@ BLEGateway::hex_to_bytes(
 
 
 
+
+
+
 void BLEGateway::send_hex(
     std::string hex
+)
+
+{
+
+
+    ESP_LOGI(
+        TAG,
+        "BLE RX CMD:%s",
+        hex.c_str()
+    );
+
+
+
+    /*
+     * 多包处理
+     */
+
+    if(
+        hex.find("|") != std::string::npos
+    )
+    {
+
+
+        packet_queue_.clear();
+
+
+
+        size_t start = 0;
+
+
+        while(true)
+        {
+
+            size_t pos =
+                hex.find(
+                    "|",
+                    start
+                );
+
+
+            if(pos == std::string::npos)
+            {
+
+                packet_queue_.push_back(
+                    hex.substr(start)
+                );
+
+                break;
+
+            }
+
+
+            packet_queue_.push_back(
+                hex.substr(
+                    start,
+                    pos-start
+                )
+            );
+
+
+            start =
+                pos+1;
+
+        }
+
+
+
+        send_next_packet();
+
+
+        return;
+
+    }
+
+
+
+    /*
+     * 单包
+     */
+
+    send_raw_packet(hex);
+
+
+}
+
+
+
+
+
+
+
+
+void BLEGateway::send_next_packet()
+{
+
+    if(packet_queue_.empty())
+    {
+
+        return;
+
+    }
+
+
+
+    std::string packet =
+        packet_queue_.front();
+
+
+
+    packet_queue_.erase(
+        packet_queue_.begin()
+    );
+
+
+
+    send_raw_packet(packet);
+
+
+}
+
+
+
+
+
+
+
+
+void BLEGateway::send_raw_packet(
+    std::string packet
 )
 
 {
@@ -119,13 +292,13 @@ void BLEGateway::send_hex(
     ESP_LOGI(
         TAG,
         "BLE TX RAW:%s",
-        hex.c_str()
+        packet.c_str()
     );
 
 
 
     auto data =
-        hex_to_bytes(hex);
+        hex_to_bytes(packet);
 
 
 
@@ -143,21 +316,13 @@ void BLEGateway::send_hex(
 
 
 
-    /*
-     * 这里直接发送完整RAW广播包
-     *
-     * 例如：
-     *
-     * 0201021BFFA806......
-     *
-     */
-
 
     esp_err_t err =
         esp_ble_gap_config_adv_data_raw(
             data.data(),
             data.size()
         );
+
 
 
     ESP_LOGI(
@@ -169,7 +334,9 @@ void BLEGateway::send_hex(
 
 
 
+
     esp_ble_adv_params_t params={};
+
 
 
     params.adv_int_min =
@@ -199,8 +366,8 @@ void BLEGateway::send_hex(
         millis();
 
 
-    adv_running_ =
-        true;
+
+    adv_running_ = true;
 
 
 
@@ -210,6 +377,8 @@ void BLEGateway::send_hex(
     );
 
 }
+
+
 
 
 
