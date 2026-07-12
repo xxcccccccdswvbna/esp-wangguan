@@ -121,57 +121,58 @@ void BLEGateway::send_hex(
     */
 
 
+std::vector<uint8_t> manu;
+
+/*
+ * 支持两种输入：
+ *
+ * 1.
+ * 0201021BFFA806......
+ *
+ * 2.
+ * A806......
+ */
+
+if (
+    data.size() >= 5 &&
+    data[0] == 0x02 &&
+    data[1] == 0x01
+)
+{
     size_t start = 0;
 
-
-    for(
-        size_t i=0;
-        i<data.size();
-        i++
-    )
-
+    for (size_t i = 0; i < data.size(); i++)
     {
-
-        if(data[i]==0xFF)
+        if (data[i] == 0xFF)
         {
-
-            start=i+1;
+            start = i + 1;
             break;
-
         }
-
     }
 
-
-
-    if(start==0)
+    if (start == 0)
     {
-
-        ESP_LOGW(
-            TAG,
-            "manufacturer not found"
-        );
-
+        ESP_LOGW(TAG, "manufacturer not found");
         return;
-
     }
 
+    manu.assign(
+        data.begin() + start,
+        data.end()
+    );
+}
+else
+{
+    // 已经是 Manufacturer Data
 
+    manu = data;
+}
 
-    std::vector<uint8_t> manu;
-
-
-    for(
-        size_t i=start;
-        i<data.size();
-        i++
-    )
-
-    {
-
-        manu.push_back(data[i]);
-
-    }
+ESP_LOGI(
+    TAG,
+    "Manufacturer bytes=%d",
+    manu.size()
+);
 
 
 
