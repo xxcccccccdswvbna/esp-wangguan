@@ -3,6 +3,7 @@
 #include "esphome/core/log.h"
 
 #include "esp_gap_ble_api.h"
+#include "esp_bt.h"
 
 
 namespace esphome {
@@ -12,17 +13,44 @@ namespace ble_gateway {
 static const char *TAG = "ble_gateway";
 
 
+BLEGateway *BLEGateway::instance_ = nullptr;
+
+
 
 void BLEGateway::setup()
 {
 
     ESP_LOGI(
         TAG,
-        "BLE Gateway ready"
+        "BLE Gateway V2 start"
     );
 
-}
 
+    instance_ = this;
+
+
+    esp_ble_gap_register_callback(
+        BLEGateway::gap_callback
+    );
+
+
+    adv_params_.adv_int_min = 0x20;
+
+    adv_params_.adv_int_max = 0x40;
+
+    adv_params_.adv_type =
+        ADV_TYPE_NONCONN_IND;
+
+    adv_params_.own_addr_type =
+        BLE_ADDR_TYPE_PUBLIC;
+
+    adv_params_.channel_map =
+        ADV_CHNL_ALL;
+
+    adv_params_.adv_filter_policy =
+        ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY;
+
+}
 
 
 
@@ -33,7 +61,9 @@ void BLEGateway::loop()
 
 
 
-
+/*
+ * HEX 转 BYTE
+ */
 std::vector<uint8_t>
 BLEGateway::hex_to_bytes(
     const std::string &hex
@@ -44,17 +74,33 @@ BLEGateway::hex_to_bytes(
     std::vector<uint8_t> data;
 
 
+    std::string clean = hex;
+
+
+    // 去掉0x
+
+    if(
+        clean.rfind("0x",0)==0 ||
+        clean.rfind("0X",0)==0
+    )
+    {
+        clean =
+            clean.substr(2);
+    }
+
+
+
     for(
         size_t i=0;
-        i+1 < hex.length();
+        i+1<clean.length();
         i+=2
     )
-
     {
 
         uint8_t b =
             strtol(
-                hex.substr(i,2).c_str(),
+                clean.substr(i,2)
+                .c_str(),
                 nullptr,
                 16
             );
@@ -71,34 +117,33 @@ BLEGateway::hex_to_bytes(
 
 
 
-
-
-
+/*
+ * MQTT入口
+ */
 void BLEGateway::send_hex(
     std::string hex
 )
 
 {
 
-
     ESP_LOGI(
         TAG,
-        "BLE TX RAW:%s",
+        "BLE RX CMD:%s",
         hex.c_str()
     );
 
 
-    auto data =
+    auto packet =
         hex_to_bytes(hex);
 
 
 
-    if(data.size()<5)
+    if(packet.empty())
     {
 
         ESP_LOGW(
             TAG,
-            "packet too short"
+            "empty packet"
         );
 
         return;
@@ -107,117 +152,251 @@ void BLEGateway::send_hex(
 
 
 
-    /*
-       自动寻找 FF manufacturer 标志
-
-       例如：
-
-       02 01 02
-       1B FF
-       11 4D ...
-
-       只发送：
-       11 4D ...
-    */
+    enqueue_packet(packet);
 
 
-std::vector<uint8_t> manu;
+}
+
+
 
 /*
- * 支持两种输入：
- *
- * 1.
- * 0201021BFFA806......
- *
- * 2.
- * A806......
+ * 放入队列
  */
-
-if (
-    data.size() >= 5 &&
-    data[0] == 0x02 &&
-    data[1] == 0x01
+void BLEGateway::enqueue_packet(
+    std::vector<uint8_t> packet
 )
-{
-    size_t start = 0;
 
-    for (size_t i = 0; i < data.size(); i++)
+{
+
+    tx_queue_.push(
+        packet
+    );
+
+
+    if(!busy_)
     {
-        if (data[i] == 0xFF)
-        {
-            start = i + 1;
-            break;
-        }
+        send_next_packet();
     }
 
-    if (start == 0)
+}
+
+
+
+/*
+ * 发送下一包
+ */
+void BLEGateway::send_next_packet()
+
+{
+
+    if(tx_queue_.empty())
     {
-        ESP_LOGW(TAG, "manufacturer not found");
+
+        busy_=false;
+
         return;
+
     }
 
-    manu.assign(
-        data.begin() + start,
-        data.end()
-    );
-}
-else
-{
-    // 已经是 Manufacturer Data
-
-    manu = data;
-}
-
-ESP_LOGI(
-    TAG,
-    "Manufacturer bytes=%d",
-    manu.size()
-);
 
 
-
-esp_err_t err =
-    esp_ble_gap_config_adv_data_raw(
-        data.data(),
-        data.size()
-    );
-
-ESP_LOGI(
-    TAG,
-    "RAW ADV len=%d err=%d",
-    data.size(),
-    err
-);
+    busy_=true;
 
 
-
-    esp_ble_adv_params_t params={};
-
-
-    params.adv_int_min=0x20;
-
-    params.adv_int_max=0x40;
-
-    params.adv_type=
-        ADV_TYPE_NONCONN_IND;
-
-    params.channel_map=
-        ADV_CHNL_ALL;
+    current_packet_ =
+        tx_queue_.front();
 
 
-
-    esp_ble_gap_start_advertising(
-        &params
-    );
+    tx_queue_.pop();
 
 
 
     ESP_LOGI(
         TAG,
-        "BLE TX manufacturer length=%d",
-        manu.size()
+        "RAW ADV SEND len=%d",
+        current_packet_.size()
     );
 
+
+
+    esp_err_t err =
+        esp_ble_gap_config_adv_data_raw(
+            current_packet_.data(),
+            current_packet_.size()
+        );
+
+
+    ESP_LOGI(
+        TAG,
+        "config raw result=%d",
+        err
+    );
+
+}
+
+
+
+
+/*
+ * 开始广播
+ */
+void BLEGateway::start_advertising()
+
+{
+
+    if(advertising_)
+        return;
+
+
+
+    advertising_=true;
+
+
+    esp_ble_gap_start_advertising(
+        &adv_params_
+    );
+
+
+}
+
+
+
+/*
+ * 停止广播
+ */
+void BLEGateway::stop_advertising()
+
+{
+
+    if(!advertising_)
+        return;
+
+
+
+    ESP_LOGI(
+        TAG,
+        "STOP ADV"
+    );
+
+
+
+    esp_ble_gap_stop_advertising();
+
+
+    advertising_=false;
+
+
+
+    send_next_packet();
+
+}
+
+
+
+
+
+/*
+ * GAP 回调
+ */
+void BLEGateway::gap_callback(
+    esp_gap_ble_cb_event_t event,
+    esp_ble_gap_cb_param_t *param
+)
+
+{
+
+    if(instance_==nullptr)
+        return;
+
+
+
+    switch(event)
+    {
+
+
+        /*
+         * RAW数据配置完成
+         */
+        case ESP_GAP_BLE_ADV_DATA_RAW_SET_COMPLETE_EVT:
+        {
+
+
+            ESP_LOGI(
+                TAG,
+                "RAW DATA READY"
+            );
+
+
+            instance_->start_advertising();
+
+
+            break;
+
+        }
+
+
+
+        /*
+         * 广播启动完成
+         */
+        case ESP_GAP_BLE_ADV_START_COMPLETE_EVT:
+        {
+
+
+            ESP_LOGI(
+                TAG,
+                "ADV START"
+            );
+
+
+
+            /*
+             * 广播50ms
+             */
+
+            instance_->set_timeout(
+                "ble_stop",
+                50,
+                []()
+                {
+
+                    if(instance_)
+                    {
+
+                        instance_->stop_advertising();
+
+                    }
+
+                }
+            );
+
+
+            break;
+
+        }
+
+
+
+        case ESP_GAP_BLE_ADV_STOP_COMPLETE_EVT:
+        {
+
+
+            ESP_LOGI(
+                TAG,
+                "ADV STOP COMPLETE"
+            );
+
+
+            break;
+
+        }
+
+
+
+        default:
+            break;
+
+    }
 
 }
 
@@ -240,7 +419,6 @@ bool BLEGateway::parse_status(
     return true;
 
 }
-
 
 
 
