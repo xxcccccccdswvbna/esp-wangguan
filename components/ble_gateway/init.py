@@ -1,7 +1,6 @@
 import esphome.codegen as cg
 import esphome.config_validation as cv
 
-from esphome.components import mqtt
 from esphome.const import CONF_ID
 
 DEPENDENCIES = ["esp32"]
@@ -31,4 +30,13 @@ async def to_code(config):
     await cg.register_component(
         var,
         config
+    )
+
+    cg.add_library(
+        "ble_gateway",
+        None
+    )
+
+    cg.add_build_flag(
+        "-std=gnu++17"
     )
