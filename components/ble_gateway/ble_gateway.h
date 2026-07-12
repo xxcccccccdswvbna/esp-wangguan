@@ -57,43 +57,19 @@ class BLEGateway : public Component {
 
 
 
- private:
+private:
 
-
-
-    /*
-     * 当前广播状态
-     */
     bool adv_running_{false};
 
-
-
-    /*
-     * 当前广播开始时间
-     */
     uint32_t adv_start_time_{0};
 
-
-
-    /*
-     * 多包队列
-     */
-    std::vector<std::string> packet_queue_;
-
-
-
-    /*
-     * 当前等待时间
-     */
-    uint32_t next_packet_time_{0};
-
-
-
-    /*
-     * 是否等待下一包
-     */
     bool waiting_next_packet_{false};
 
+    uint32_t next_packet_time_{0};
+
+    bool just_stopped_{false};
+
+    std::vector<std::string> packet_queue_;
 
 
     /*
