@@ -1,9 +1,7 @@
 import esphome.codegen as cg
 import esphome.config_validation as cv
 
-
 from esphome.const import CONF_ID
-
 
 
 DEPENDENCIES = [
@@ -14,7 +12,6 @@ DEPENDENCIES = [
 AUTO_LOAD = [
     "esp32_ble"
 ]
-
 
 
 ble_gateway_ns = cg.esphome_ns.namespace(
@@ -28,14 +25,12 @@ BLEGateway = ble_gateway_ns.class_(
 )
 
 
-
 CONFIG_SCHEMA = cv.Schema(
     {
         cv.GenerateID():
         cv.declare_id(BLEGateway),
     }
 )
-
 
 
 async def to_code(config):
