@@ -1,5 +1,5 @@
 esphome:
-  name: ct2
+  name: ct1
   friendly_name: CT1 BLE Gateway
 
 
@@ -56,5 +56,4 @@ external_components:
 
 
 ble_gateway:
-
-  id: ble_gateway
+  id: ct1_ble
