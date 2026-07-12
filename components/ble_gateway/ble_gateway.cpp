@@ -1,45 +1,255 @@
-#pragma once
+#include "ble_gateway.h"
 
-#include "esphome/core/component.h"
+#include "esphome/core/log.h"
 
-#include <string>
-#include <vector>
+#include "esp_gap_ble_api.h"
 
 
 namespace esphome {
 namespace ble_gateway {
 
 
-class BLEGateway : public Component {
+static const char *TAG = "ble_gateway";
 
 
-public:
 
-    void setup() override;
+void BLEGateway::setup()
+{
 
-    void loop() override;
+    ESP_LOGI(
+        TAG,
+        "BLE Gateway ready"
+    );
+
+}
 
 
-    void send_hex(
-        std::string hex
+
+
+void BLEGateway::loop()
+{
+
+}
+
+
+
+
+std::vector<uint8_t>
+BLEGateway::hex_to_bytes(
+    const std::string &hex
+)
+
+{
+
+    std::vector<uint8_t> data;
+
+
+    for(
+        size_t i=0;
+        i+1 < hex.length();
+        i+=2
+    )
+
+    {
+
+        uint8_t b =
+            strtol(
+                hex.substr(i,2).c_str(),
+                nullptr,
+                16
+            );
+
+
+        data.push_back(b);
+
+    }
+
+
+    return data;
+
+}
+
+
+
+
+
+
+void BLEGateway::send_hex(
+    std::string hex
+)
+
+{
+
+
+    ESP_LOGI(
+        TAG,
+        "BLE TX RAW:%s",
+        hex.c_str()
     );
 
 
-    bool parse_status(
-        std::string hex
+    auto data =
+        hex_to_bytes(hex);
+
+
+
+    if(data.size()<5)
+    {
+
+        ESP_LOGW(
+            TAG,
+            "packet too short"
+        );
+
+        return;
+
+    }
+
+
+
+    /*
+       自动寻找 FF manufacturer 标志
+
+       例如：
+
+       02 01 02
+       1B FF
+       11 4D ...
+
+       只发送：
+       11 4D ...
+    */
+
+
+    size_t start = 0;
+
+
+    for(
+        size_t i=0;
+        i<data.size();
+        i++
+    )
+
+    {
+
+        if(data[i]==0xFF)
+        {
+
+            start=i+1;
+            break;
+
+        }
+
+    }
+
+
+
+    if(start==0)
+    {
+
+        ESP_LOGW(
+            TAG,
+            "manufacturer not found"
+        );
+
+        return;
+
+    }
+
+
+
+    std::vector<uint8_t> manu;
+
+
+    for(
+        size_t i=start;
+        i<data.size();
+        i++
+    )
+
+    {
+
+        manu.push_back(data[i]);
+
+    }
+
+
+
+    esp_ble_adv_data_t adv={};
+
+
+    adv.set_scan_rsp=false;
+
+    adv.include_name=false;
+
+    adv.include_txpower=false;
+
+
+    adv.manufacturer_len =
+        manu.size();
+
+
+    adv.p_manufacturer_data =
+        manu.data();
+
+
+
+    esp_ble_gap_config_adv_data(
+        &adv
     );
 
 
 
-private:
+    esp_ble_adv_params_t params={};
 
 
-    std::vector<uint8_t> hex_to_bytes(
-        const std::string &hex
+    params.adv_int_min=0x20;
+
+    params.adv_int_max=0x40;
+
+    params.adv_type=
+        ADV_TYPE_NONCONN_IND;
+
+    params.channel_map=
+        ADV_CHNL_ALL;
+
+
+
+    esp_ble_gap_start_advertising(
+        &params
     );
 
 
-};
+
+    ESP_LOGI(
+        TAG,
+        "BLE TX manufacturer length=%d",
+        manu.size()
+    );
+
+
+}
+
+
+
+
+bool BLEGateway::parse_status(
+    std::string hex
+)
+
+{
+
+    ESP_LOGI(
+        TAG,
+        "BLE RX:%s",
+        hex.c_str()
+    );
+
+
+    return true;
+
+}
+
 
 
 
