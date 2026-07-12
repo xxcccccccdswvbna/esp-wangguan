@@ -61,7 +61,7 @@ void BLEGateway::loop()
         {
 
             next_packet_time_ =
-                millis() + 300;
+                millis() + 500;
 
 
             waiting_next_packet_ = true;
@@ -72,9 +72,19 @@ void BLEGateway::loop()
 
 
 
-    /*
-     * 发送下一包
-     */
+if(just_stopped_)
+{
+
+    just_stopped_ = false;
+
+    return;
+
+}
+
+
+/*
+ * 发送下一包
+ */
 
 if(
     waiting_next_packet_ &&
