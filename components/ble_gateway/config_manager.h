@@ -1,10 +1,8 @@
 #pragma once
 
-
 #include <string>
 #include <vector>
 #include <map>
-
 
 
 namespace esphome {
@@ -20,11 +18,7 @@ struct BLEDeviceCommand
 
     std::vector<std::string> packets;
 
-
 };
-
-
-
 
 
 
@@ -49,15 +43,11 @@ public:
 private:
 
 
-    std::map<
-        std::string,
-        BLEDeviceCommand
-    > commands_;
+    std::map<std::string, BLEDeviceCommand> commands_;
 
 
 
 };
-
 
 
 
