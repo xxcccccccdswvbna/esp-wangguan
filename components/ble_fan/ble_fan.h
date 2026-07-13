@@ -7,9 +7,10 @@
 namespace esphome {
 namespace ble_fan {
 
-class BLEFan : public fan::Fan {
+// 【关键】同时继承 fan::Fan 和 Component
+class BLEFan : public fan::Fan, public Component {
 public:
-    // 【必须】显式声明 setup 和 loop，保证虚函数表完整
+    // 【关键】实现 Component 的虚函数，保证内存布局完整，防止运行时崩溃
     void setup() override;
     void loop() override;
 
