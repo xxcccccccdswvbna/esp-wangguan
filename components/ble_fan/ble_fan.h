@@ -1,14 +1,14 @@
 #pragma once
 
-#include "esphome/core/component.h"
+// 【修正】不需要包含 component.h
 #include "esphome/components/fan/fan.h"
 #include "../ble_gateway/ble_gateway.h"
 
 namespace esphome {
 namespace ble_fan {
 
-// 【核心修正】继承 fan::FanOutput，而不是 fan::Fan！
-class BLEFan : public fan::FanOutput {
+// 【核心】只继承 fan::Fan，绝对不要加 public Component
+class BLEFan : public fan::Fan {
 public:
     void set_gateway(ble_gateway::BLEGateway *gateway) { gateway_ = gateway; }
     void set_device_id(const std::string &device_id) { device_id_ = device_id; }
