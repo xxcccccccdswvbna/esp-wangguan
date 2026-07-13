@@ -124,16 +124,21 @@ BLEGateway::hex_to_bytes(
     std::vector<uint8_t> data;
 
 
-    std::string clean = hex;
+    std::string clean;
 
 
-    if(
-        clean.rfind("0x",0)==0 ||
-        clean.rfind("0X",0)==0
-    )
+    for(char c : hex)
     {
-        clean =
-            clean.substr(2);
+
+        if(
+            (c >= '0' && c <= '9') ||
+            (c >= 'A' && c <= 'F') ||
+            (c >= 'a' && c <= 'f')
+        )
+        {
+            clean += c;
+        }
+
     }
 
 
