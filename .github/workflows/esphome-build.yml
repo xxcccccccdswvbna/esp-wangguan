@@ -3,7 +3,7 @@ name: ESPHome Build
 on:
   push:
     branches:
-      - main
+      - CT1-V2.1
 
 jobs:
   build:
