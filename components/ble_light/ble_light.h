@@ -6,7 +6,6 @@
 namespace esphome {
 namespace ble_light {
 
-// 【修改】只继承 LightOutput，移除 Component
 class BLELight : public light::LightOutput {
 public:
     void set_gateway(ble_gateway::BLEGateway *gateway) { gateway_ = gateway; }
@@ -19,8 +18,15 @@ protected:
     ble_gateway::BLEGateway *gateway_{nullptr};
     std::string device_id_;
 
+    // 映射算法
     std::string map_brightness(float brightness);
     std::string map_color_temp(float color_temp_mireds);
+
+    // 【新增】状态缓存与防抖变量
+    uint32_t last_send_time_{0};           // 上次发送 BLE 包的时间
+    std::string last_brightness_action_;   // 上次发送的亮度指令 (如 "brightness_50")
+    std::string last_color_temp_action_;   // 上次发送的色温指令 (如 "color_3500")
+    bool is_currently_on_{false};          // 当前记录的开关状态
 };
 
 } // namespace ble_light
