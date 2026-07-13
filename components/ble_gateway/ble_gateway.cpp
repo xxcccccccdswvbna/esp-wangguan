@@ -30,13 +30,12 @@ void BLEGateway::setup()
 
 
 
-
 void BLEGateway::loop()
 {
 
 
     /*
-     * BLE GAP 冷却等待
+     * BLE GAP 冷却
      */
     if(cooldown_)
     {
@@ -61,9 +60,8 @@ void BLEGateway::loop()
 
 
 
-
     /*
-     * 广播停止
+     * 停止广播
      */
     if(
         adv_running_ &&
@@ -92,6 +90,9 @@ void BLEGateway::loop()
 
 
 
+        /*
+         * 下一包等待
+         */
         if(
             !packet_queue_.empty()
         )
@@ -112,7 +113,7 @@ void BLEGateway::loop()
 
 
     /*
-     * 下一包
+     * 发送下一包
      */
     if(
         waiting_next_packet_ &&
@@ -135,6 +136,7 @@ void BLEGateway::loop()
 
 
 }
+
 
 
 
@@ -179,9 +181,9 @@ BLEGateway::hex_to_bytes(
 
 
     for(
-        size_t i = 0;
-        i + 1 < clean.length();
-        i += 2
+        size_t i=0;
+        i+1 < clean.length();
+        i+=2
     )
     {
 
@@ -199,10 +201,13 @@ BLEGateway::hex_to_bytes(
     }
 
 
-
     return data;
 
 }
+
+
+
+
 
 
 
@@ -223,122 +228,114 @@ void BLEGateway::send_hex(
 
 
 
+
     /*
-     * 查询设备配置
+     * 命令模式
      *
      * 例如:
      *
-     * light.room1
+     * light.room1.on
      *
      */
-BLEAction action;
 
 
-if(
-    hex.find("|") == std::string::npos &&
-    hex.find("020102") != 0 &&
-    config_manager_.get_action(
-        hex,
-        action
-    )
-)
-{
-
-    ESP_LOGI(
-        TAG,
-        "COMMAND FOUND:%s",
-        hex.c_str()
-    );
-
-
-    std::string packets;
-
-
-
-    for(
-        size_t i = 0;
-        i < action.packets.size();
-        i++
+    if(
+        hex.find("020102") != 0 &&
+        hex.find("|") == std::string::npos
     )
     {
 
-        if(i > 0)
-            packets += "|";
+
+        size_t pos =
+            hex.rfind(".");
 
 
-        packets +=
-            action.packets[i];
-
-    }
-
-
-
-    send_hex(
-        packets
-    );
-
-
-    return;
-
-}
-    {
-
-
-        ESP_LOGI(
-            TAG,
-            "COMMAND FOUND:%s",
-            hex.c_str()
-        );
-
-
-
-        std::string packets;
-
-
-
-        /*
-         * 临时默认动作 on
-         *
-         * 后续扩展 action
-         */
-        auto action =
-            device.actions["on"];
-
-
-
-
-        for(
-            size_t i = 0;
-            i < action.packets.size();
-            i++
+        if(
+            pos != std::string::npos
         )
         {
 
-            if(i > 0)
+
+            std::string device_id =
+                hex.substr(
+                    0,
+                    pos
+                );
+
+
+
+            std::string action_name =
+                hex.substr(
+                    pos + 1
+                );
+
+
+
+            BLEAction action;
+
+
+
+            if(
+                config_manager_.get_action(
+                    device_id,
+                    action_name,
+                    action
+                )
+            )
             {
-                packets += "|";
+
+
+                ESP_LOGI(
+                    TAG,
+                    "COMMAND FOUND:%s",
+                    hex.c_str()
+                );
+
+
+
+                std::string packets;
+
+
+
+                for(
+                    size_t i=0;
+                    i < action.packets.size();
+                    i++
+                )
+                {
+
+                    if(i>0)
+                    {
+                        packets += "|";
+                    }
+
+
+                    packets +=
+                        action.packets[i];
+
+                }
+
+
+
+                /*
+                 * 转HEX发送
+                 */
+                send_hex(
+                    packets
+                );
+
+
+                return;
+
             }
-
-
-            packets +=
-                action.packets[i];
 
         }
 
-
-
-        send_hex(
-            packets
-        );
-
-
-        return;
-
     }
     /*
-     * 多包发送
+     * 多包HEX
      *
-     * HEX|HEX
+     * HEX|HEX|HEX
      */
     if(
         hex.find("|") != std::string::npos
@@ -381,7 +378,6 @@ if(
 
 
 
-
             packet_queue_.push_back(
                 hex.substr(
                     start,
@@ -394,17 +390,16 @@ if(
             start =
                 pos + 1;
 
-
         }
 
 
 
 
+
         /*
-         * 发送第一包
+         * 立即发送第一包
          */
         send_next_packet();
-
 
 
         return;
@@ -416,8 +411,9 @@ if(
 
 
 
+
     /*
-     * 单HEX包
+     * 单HEX
      */
     send_raw_packet(
         hex
@@ -433,9 +429,9 @@ if(
 
 
 
+
 void BLEGateway::send_next_packet()
 {
-
 
     if(
         packet_queue_.empty()
@@ -445,7 +441,6 @@ void BLEGateway::send_next_packet()
         return;
 
     }
-
 
 
 
@@ -475,6 +470,9 @@ void BLEGateway::send_next_packet()
 
 
 
+
+
+
 void BLEGateway::send_raw_packet(
     std::string packet
 )
@@ -489,10 +487,12 @@ void BLEGateway::send_raw_packet(
 
 
 
+
     auto data =
         hex_to_bytes(
             packet
         );
+
 
 
 
@@ -510,6 +510,7 @@ void BLEGateway::send_raw_packet(
         return;
 
     }
+
 
 
 
@@ -552,7 +553,7 @@ void BLEGateway::send_raw_packet(
 
 
     /*
-     * 非连接广播
+     * 不连接广播
      */
     params.adv_type =
         ADV_TYPE_NONCONN_IND;
@@ -561,6 +562,8 @@ void BLEGateway::send_raw_packet(
 
     params.channel_map =
         ADV_CHNL_ALL;
+
+
 
 
 
@@ -612,7 +615,6 @@ bool BLEGateway::parse_status(
     return true;
 
 }
-
 
 
 
