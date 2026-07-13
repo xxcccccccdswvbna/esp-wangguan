@@ -4,6 +4,7 @@
 #include "esphome/core/component.h"
 
 #include "config_manager.h"
+#include "command_router.h"
 
 #include <vector>
 #include <string>
@@ -43,6 +44,11 @@ class BLEGateway : public Component {
     );
 
 
+    bool send_command(
+        std::string device,
+        std::string action
+    );
+
 
     bool parse_status(
         std::string hex
@@ -60,13 +66,19 @@ class BLEGateway : public Component {
 
 
 
- private:
+private:
 
 
     /*
      * 设备配置管理
      */
     ConfigManager config_manager_;
+
+
+    /*
+     * 命令路由
+     */
+    CommandRouter command_router_;
 
 
 
