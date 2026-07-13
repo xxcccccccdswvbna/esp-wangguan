@@ -3,14 +3,13 @@
 #include "esphome/core/log.h"
 
 
+
 namespace esphome {
 namespace ble_gateway {
 
 
 
-static const char *TAG = "config_manager";
-
-
+static const char *TAG="config_manager";
 
 
 
@@ -25,54 +24,42 @@ void ConfigManager::load()
 
 
 
-    /*
-     * 灯开关
-     *
-     * 后续所有设备
-     * 都在这里注册
-     */
-
-
-    BLEDeviceCommand light_toggle;
+    BLEDeviceCommand light;
 
 
 
-    light_toggle.name =
-        "light_toggle";
+    light.name =
+        "light.room1.toggle";
 
 
 
-    light_toggle.packets.push_back(
+    light.packets.push_back(
         "0201021BFFA806810F99CDAB38700000A939387670002078053DCDCDE31BA3"
     );
 
 
-    light_toggle.packets.push_back(
+
+    light.packets.push_back(
         "0201021BFFA806810F19CDAB38700000043CCDCDE31BABABA8383870700022"
     );
 
 
 
     commands_[
-        light_toggle.name
+        light.name
     ] =
-        light_toggle;
-
-
+        light;
 
 
 
     ESP_LOGI(
         TAG,
-        "Loaded commands: %d",
+        "Loaded commands:%d",
         commands_.size()
     );
 
 
 }
-
-
-
 
 
 
@@ -87,9 +74,7 @@ bool ConfigManager::get_command(
 
 
     auto it =
-        commands_.find(
-            name
-        );
+        commands_.find(name);
 
 
 
@@ -121,9 +106,6 @@ bool ConfigManager::get_command(
 
 
 }
-
-
-
 
 
 
