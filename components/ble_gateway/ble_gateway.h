@@ -6,11 +6,12 @@
 #include "config_manager.h"
 
 #include <vector>
-#include <string>>
+#include <string>
 
 
 namespace esphome {
 namespace ble_gateway {
+
 
 
 class BLEGateway : public Component {
@@ -29,7 +30,7 @@ class BLEGateway : public Component {
     /*
      * MQTT入口
      *
-     * 支持：
+     * 支持:
      *
      * 单包:
      * HEX
@@ -59,21 +60,55 @@ class BLEGateway : public Component {
 
 
 
-private:
+ private:
 
+
+    /*
+     * 设备配置管理
+     */
     ConfigManager config_manager_;
 
+
+
+    /*
+     * 当前广播状态
+     */
     bool adv_running_{false};
+
 
     uint32_t adv_start_time_{0};
 
+
+
+    /*
+     * 广播停止时间
+     */
+    uint32_t adv_stop_time_{0};
+
+
+
+    /*
+     * BLE GAP冷却
+     */
+    bool cooldown_{false};
+
+
+
+
+    /*
+     * 多包发送控制
+     */
     bool waiting_next_packet_{false};
+
 
     uint32_t next_packet_time_{0};
 
-    bool just_stopped_{false};
 
-    std::vector<std::string> packet_queue_;
+
+    std::vector<std::string>
+    packet_queue_;
+
+
 
 
     /*
