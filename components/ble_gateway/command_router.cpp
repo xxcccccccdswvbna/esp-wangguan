@@ -1,3 +1,4 @@
+#include "ble_gateway.h"
 #include "command_router.h"
 
 
