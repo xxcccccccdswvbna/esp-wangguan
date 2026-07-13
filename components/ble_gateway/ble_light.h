@@ -2,6 +2,7 @@
 
 #include "esphome/components/light/light_output.h"
 #include "esphome/components/light/light_state.h"
+#include "esphome/core/component.h"
 
 #include "ble_gateway.h"
 
@@ -13,7 +14,6 @@ namespace ble_gateway {
 class BLELight : public Component,
                  public light::LightOutput
 {
-
 
 public:
 
@@ -36,7 +36,6 @@ public:
 
 
 
-
     light::LightTraits get_traits() override;
 
 
@@ -56,7 +55,6 @@ protected:
 
 
 };
-
 
 
 }
