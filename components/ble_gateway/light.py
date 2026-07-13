@@ -29,12 +29,6 @@ async def to_code(config):
     )
 
 
-    await light.register_light(
-        var,
-        config
-    )
-
-
     cg.add(
         var.set_device(
             config[CONF_DEVICE]
