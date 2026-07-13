@@ -3,6 +3,8 @@
 
 #include "device_model.h"
 
+#include <vector>
+
 
 namespace esphome {
 namespace ble_gateway {
@@ -12,7 +14,6 @@ class DeviceTable
 {
 
 public:
-
 
     static void load(
         std::vector<BLEDevice> &devices
@@ -28,7 +29,6 @@ private:
         std::string type,
         std::string name
     );
-
 
 
     static void add_action(
