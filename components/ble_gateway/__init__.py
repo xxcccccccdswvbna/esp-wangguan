@@ -4,6 +4,12 @@ import esphome.config_validation as cv
 from esphome.const import CONF_ID
 
 
+DEPENDENCIES = [
+    "esp32_ble_tracker",
+    "light",
+]
+
+
 ble_gateway_ns = cg.esphome_ns.namespace(
     "ble_gateway"
 )
