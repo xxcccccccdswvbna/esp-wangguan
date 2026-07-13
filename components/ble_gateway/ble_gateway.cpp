@@ -231,18 +231,56 @@ void BLEGateway::send_hex(
      * light.room1
      *
      */
-    BLEDevice device;
+BLEAction action;
 
 
-
-    if(
-        hex.find("|") == std::string::npos &&
-        hex.find("020102") != 0 &&
-        config_manager_.get_command(
-            hex,
-            device
-        )
+if(
+    hex.find("|") == std::string::npos &&
+    hex.find("020102") != 0 &&
+    config_manager_.get_action(
+        hex,
+        action
     )
+)
+{
+
+    ESP_LOGI(
+        TAG,
+        "COMMAND FOUND:%s",
+        hex.c_str()
+    );
+
+
+    std::string packets;
+
+
+
+    for(
+        size_t i = 0;
+        i < action.packets.size();
+        i++
+    )
+    {
+
+        if(i > 0)
+            packets += "|";
+
+
+        packets +=
+            action.packets[i];
+
+    }
+
+
+
+    send_hex(
+        packets
+    );
+
+
+    return;
+
+}
     {
 
 
