@@ -1,109 +1,75 @@
-#include "config_manager.h"
-
-#include "device_table.h"
-
-#include "esphome/core/log.h"
-
+#include "command_router.h"
+#include "ble_gateway.h"
 
 
 namespace esphome {
 namespace ble_gateway {
 
 
-
-static const char *TAG =
-"config_manager";
-
-
-
-
-void ConfigManager::load()
+void CommandRouter::set_gateway(
+    BLEGateway *gateway
+)
 {
-
-    devices_.clear();
-
-
-    DeviceTable table;
-
-
-    table.load(
-        devices_
-    );
-
-
-    ESP_LOGI(
-        TAG,
-        "Loaded devices: %d",
-        devices_.size()
-    );
-
+    gateway_ = gateway;
 }
 
 
 
-
-bool ConfigManager::get_action(
-    const std::string &device_id,
-    const std::string &action,
-    BLEAction &result
+void CommandRouter::set_config(
+    ConfigManager *config
 )
+{
+    config_ = config;
+}
 
+
+
+bool CommandRouter::send_command(
+    std::string device,
+    std::string action
+)
 {
 
+    if(
+        !gateway_ ||
+        !config_
+    )
+    {
+        return false;
+    }
 
-    for(auto &device : devices_)
+
+    BLEAction result;
+
+
+    if(
+        !config_->get_action(
+            device,
+            action,
+            result
+        )
+    )
+    {
+        return false;
+    }
+
+
+    for(
+        auto &packet :
+        result.packets
+    )
     {
 
-
-        if(device.id != device_id)
-            continue;
-
-
-
-        auto it =
-            device.actions.find(action);
-
-
-
-        if(
-            it ==
-            device.actions.end()
-        )
-        {
-
-            ESP_LOGW(
-                TAG,
-                "action not found:%s",
-                action.c_str()
-            );
-
-
-            return false;
-
-        }
-
-
-        result =
-            it->second;
-
-
-        return true;
+        gateway_->send_hex(
+            packet
+        );
 
     }
 
 
-
-    ESP_LOGW(
-        TAG,
-        "device not found:%s",
-        device_id.c_str()
-    );
-
-
-    return false;
+    return true;
 
 }
-
 
 
 }
