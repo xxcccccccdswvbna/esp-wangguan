@@ -9,7 +9,8 @@ ble_fan_ns = cg.esphome_ns.namespace("ble_fan")
 ble_gateway_ns = cg.esphome_ns.namespace("ble_gateway")
 fan_ns = cg.esphome_ns.namespace("fan")
 
-BLEFan = ble_fan_ns.class_("BLEFan", fan.Fan) # 【修正】移除 cg.Component
+# 【关键修复】必须同时声明为 fan.Fan 和 cg.Component
+BLEFan = ble_fan_ns.class_("BLEFan", fan.Fan, cg.Component)
 BLEGateway = ble_gateway_ns.class_("BLEGateway", cg.Component)
 
 CONF_BLE_DEVICE_ID = "ble_device_id"
@@ -38,9 +39,8 @@ CONFIG_SCHEMA = cv.Schema({
 async def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID])
     
-    # 【修正】移除这一行！不再注册为 Component，只注册为 Fan
-    # await cg.register_component(var, config)
-    
+    # 【关键修复】必须恢复注册为 Component！否则会导致 HA 连接时内存崩溃
+    await cg.register_component(var, config)
     await fan.register_fan(var, config)
 
     gateway_var = await cg.get_variable(config[CONF_GATEWAY])
