@@ -35,10 +35,11 @@ external_components:
       path: components
 
 # ==========================================
-# 👇 核心：自动引入生成的配置 (无需手动修改这里)
+# 👇 核心修复：使用 packages 机制引入自动生成的配置
 # ==========================================
-!include auto_tracker.yaml
-!include auto_entities.yaml
+packages:
+  tracker_config: !include auto_tracker.yaml
+  entities_config: !include auto_entities.yaml
 
 # ==========================================
 # 网关实例
