@@ -24,11 +24,29 @@ wifi:
     ssid: "CT1 Fallback"
     password: "12345678"
 
+# 【1. 开启 HTTP 网页服务】用于本地 OTA 升级和查看状态
+web_server:
+  port: 80
+  version: 2
+
+# 【2. 开启 MQTT】请修改 broker 为你的 HA 或 MQTT 服务器 IP
+mqtt:
+  broker: "192.168.6.88"
+  # username: "your_mqtt_user"
+  # password: "your_mqtt_pass"
+  discovery: true
+
+# 【3. 开启 HA 原生 API】
 api:
   reboot_timeout: 0s
 
 ota:
   - platform: esphome
+    # password: "your_ota_password" # 建议取消注释并设置密码
+
+# 【4. 开启蓝牙代理】让 ESP32 帮 HA 接收其他蓝牙设备（如温湿度计）的数据
+bluetooth_proxy:
+  active: false # 设为 false 仅被动转发广播，极度节省资源。如需连接蓝牙设备改为 true
 
 external_components:
   - source:
