@@ -9,7 +9,7 @@ ble_fan_ns = cg.esphome_ns.namespace("ble_fan")
 ble_gateway_ns = cg.esphome_ns.namespace("ble_gateway")
 fan_ns = cg.esphome_ns.namespace("fan")
 
-# 【关键】必须同时声明 cg.Component 和 fan.Fan
+# 【关键】声明继承 cg.Component 和 fan.Fan，与 C++ 端完全对齐
 BLEFan = ble_fan_ns.class_("BLEFan", cg.Component, fan.Fan)
 BLEGateway = ble_gateway_ns.class_("BLEGateway", cg.Component)
 
@@ -17,9 +17,13 @@ CONF_BLE_DEVICE_ID = "ble_device_id"
 CONF_GATEWAY = "gateway"
 
 FanRestoreMode = fan_ns.namespace("FanRestoreMode")
+
 RESTORE_MODES = {
+    "NO_RESTORE": FanRestoreMode.NO_RESTORE,
     "RESTORE_DEFAULT_OFF": FanRestoreMode.RESTORE_DEFAULT_OFF,
     "RESTORE_DEFAULT_ON": FanRestoreMode.RESTORE_DEFAULT_ON,
+    "RESTORE_INVERTED_DEFAULT_OFF": FanRestoreMode.RESTORE_INVERTED_DEFAULT_OFF,
+    "RESTORE_INVERTED_DEFAULT_ON": FanRestoreMode.RESTORE_INVERTED_DEFAULT_ON,
     "ALWAYS_OFF": FanRestoreMode.ALWAYS_OFF,
     "ALWAYS_ON": FanRestoreMode.ALWAYS_ON,
 }
@@ -35,7 +39,7 @@ CONFIG_SCHEMA = cv.Schema({
 async def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID])
     
-    # 【关键】必须注册为 Component
+    # 【关键】注册为 Component，确保 ESPHome 能正确调用 setup/loop
     await cg.register_component(var, config)
     await fan.register_fan(var, config)
 
