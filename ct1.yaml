@@ -2,104 +2,195 @@ esphome:
   name: ct1
   friendly_name: CT1 BLE Gateway
 
-
 esp32:
   board: esp32dev
   flash_size: 4MB
-
   framework:
     type: esp-idf
-
     sdkconfig_options:
       CONFIG_FREERTOS_UNICORE: y
-
       CONFIG_BT_ENABLED: y
       CONFIG_BT_BLE_ENABLED: y
-
-
 
 logger:
   baud_rate: 0
 
-
-
 wifi:
-
   ssid: "CC"
   password: "chen1122"
-
   fast_connect: true
-
   power_save_mode: none
-
-
   ap:
     ssid: "CT1 Fallback"
     password: "12345678"
 
-
-
 captive_portal:
-
-
 web_server:
-
-
 api:
   reboot_timeout: 0s
-
-
-
 ota:
   - platform: esphome
 
-
-
-
 mqtt:
-
   broker: "192.168.6.88"
-
-
   on_message:
-
     - topic: "ct1/ble/send"
-
       then:
-
         - lambda: |-
-
             id(ct1_ble).send_hex(x);
-
-
-
-
 
 external_components:
   - source:
       type: local
       path: components
 
+# ==========================================
+# 1. 状态反馈：2 个设备分组传感器 (先保稳，只开 2 个设备)
+# ==========================================
+binary_sensor:
+  - platform: template
+    id: d1_led_state
+    name: "D1 - LED State"
+    device_class: light
+  - platform: template
+    id: d1_fan_state
+    name: "D1 - Fan State"
+    device_class: running
+  - platform: template
+    id: d2_led_state
+    name: "D2 - LED State"
+    device_class: light
+  - platform: template
+    id: d2_fan_state
+    name: "D2 - Fan State"
+    device_class: running
 
+sensor:
+  - platform: template
+    id: d1_brightness
+    name: "D1 - Brightness"
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+  - platform: template
+    id: d1_color_temp
+    name: "D1 - Color Temp"
+    unit_of_measurement: "K"
+    accuracy_decimals: 0
+  - platform: template
+    id: d1_fan_speed
+    name: "D1 - Fan Speed"
+    accuracy_decimals: 0
+  - platform: template
+    id: d1_timer
+    name: "D1 - Timer"
+    unit_of_measurement: "min"
+    accuracy_decimals: 0
+  - platform: template
+    id: d2_brightness
+    name: "D2 - Brightness"
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+  - platform: template
+    id: d2_color_temp
+    name: "D2 - Color Temp"
+    unit_of_measurement: "K"
+    accuracy_decimals: 0
+  - platform: template
+    id: d2_fan_speed
+    name: "D2 - Fan Speed"
+    accuracy_decimals: 0
+  - platform: template
+    id: d2_timer
+    name: "D2 - Timer"
+    unit_of_measurement: "min"
+    accuracy_decimals: 0
+
+text_sensor:
+  - platform: template
+    id: d1_fan_direction
+    name: "D1 - Fan Direction"
+  - platform: template
+    id: d2_fan_direction
+    name: "D2 - Fan Direction"
+
+# ==========================================
+# 2. 核心：极致优化的 BLE 广播监听 (零内存分配)
+# ==========================================
 esp32_ble_tracker:
   scan_parameters:
     interval: 320ms
     window: 30ms
     active: false
+  on_ble_advertise:
+    - then:
+        - lambda: |-
+            auto datas = x.get_manufacturer_datas();
+            for (auto &data : datas) {
+                auto &raw = data.data;
+                // 1. 校验长度 (至少 20 字节) 和 协议头 (0x81, 0x53)
+                if (raw.size() < 20) continue; 
+                if (raw[0] != 0x81 || raw[1] != 0x53) continue;
 
+                // 2. 【核心优化】直接通过字节索引读取，零字符串转换，零 strtol！
+                uint8_t mode = raw[11];
+                bool led_on = (mode & 0x01) != 0;
+                bool fan_on = !(mode == 0x10 || mode == 0x11);
+                bool fan_reverse = (mode & 0x20) != 0;
+                
+                float brightness_pct = (raw[14] / 255.0f) * 100.0f;
+                float color_kelvin = 2700.0f + (6500.0f - 2700.0f) * (raw[15] / 255.0f);
+                int timer_min = (raw[16] << 8) | raw[17];
+                int fan_speed = fan_on ? (raw[18] + 1) : 0;
+                
+                std::string fan_dir_str = fan_on ? (fan_reverse ? "Reverse" : "Forward") : "Off";
 
+                // 3. MAC 地址比较 (使用 memcmp 直接比较字节，绝不生成 MAC 字符串)
+                // 注意：广播中的 MAC 是逆序的 (raw[3] 到 raw[8])
+                // 00:00:70:27:80:48 -> 逆序字节: 48 80 27 70 00 00
+                uint8_t mac1[6] = {0x48, 0x80, 0x27, 0x70, 0x00, 0x00}; 
+                // 00:00:70:35:26:92 -> 逆序字节: 92 26 35 70 00 00
+                uint8_t mac2[6] = {0x92, 0x26, 0x35, 0x70, 0x00, 0x00}; 
+                
+                // 提取当前广播的 MAC 字节 (逆序)
+                uint8_t current_mac[6] = {raw[8], raw[7], raw[6], raw[5], raw[4], raw[3]};
+
+                // 4. 路由到对应设备
+                if (memcmp(current_mac, mac1, 6) == 0) {
+                    id(d1_led_state).publish_state(led_on);
+                    id(d1_brightness).publish_state(brightness_pct);
+                    id(d1_color_temp).publish_state(color_kelvin);
+                    id(d1_fan_state).publish_state(fan_on);
+                    id(d1_fan_speed).publish_state(fan_speed);
+                    id(d1_fan_direction).publish_state(fan_dir_str);
+                    id(d1_timer).publish_state(timer_min);
+                } 
+                else if (memcmp(current_mac, mac2, 6) == 0) {
+                    id(d2_led_state).publish_state(led_on);
+                    id(d2_brightness).publish_state(brightness_pct);
+                    id(d2_color_temp).publish_state(color_kelvin);
+                    id(d2_fan_state).publish_state(fan_on);
+                    id(d2_fan_speed).publish_state(fan_speed);
+                    id(d2_fan_direction).publish_state(fan_dir_str);
+                    id(d2_timer).publish_state(timer_min);
+                }
+            }
+
+# ==========================================
+# 3. 控制链路
+# ==========================================
 ble_gateway:
   id: ct1_ble
+
 light:
   - platform: ble_light
-    id: my_bedroom_light
-    name: "卧室灯"
+    id: bedroom_light
+    name: "Bedroom Light Control"
     ble_device_id: "light.room1"
     gateway: ct1_ble
 
 fan:
   - platform: ble_fan
-    id: my_bedroom_fan
-    name: "卧室风扇"
+    id: bedroom_fan
+    name: "Bedroom Fan Control"
     ble_device_id: "fan.room1"
     gateway: ct1_ble
