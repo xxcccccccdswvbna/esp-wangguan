@@ -90,5 +90,4 @@ esp32_ble_tracker:
 
 ble_gateway:
   id: ct1_ble
-
   
