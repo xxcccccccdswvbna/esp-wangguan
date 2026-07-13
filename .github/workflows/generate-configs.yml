@@ -1,0 +1,31 @@
+name: Generate ct1.yaml and device_table.cpp
+
+on:
+  push:
+    branches:
+      - CT1-V2.1
+  workflow_dispatch:
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run Generator Script
+        run: python3 generate_device_table.py
+
+      - name: Upload ct1.yaml and device_table.cpp
+        uses: actions/upload-artifact@v4
+        with:
+          name: ct1-complete-files
+          path: |
+            ct1.yaml
+            components/ble_gateway/device_table.cpp
+          retention-days: 7
