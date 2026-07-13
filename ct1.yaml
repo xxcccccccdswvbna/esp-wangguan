@@ -95,5 +95,5 @@ ble_gateway:
 light:
   - platform: ble_gateway
     name: "卧室灯"
-    device_id: "light.room1"
+    device: light.room1
   
