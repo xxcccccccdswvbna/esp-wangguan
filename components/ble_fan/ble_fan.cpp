@@ -6,17 +6,10 @@ namespace ble_fan {
 
 static const char *TAG = "ble_fan";
 
-// 【关键】实现空的 setup 和 loop，满足 Component 接口，防止内存越界
-void BLEFan::setup() {
-    // 初始化逻辑（保持为空）
-}
-
-void BLEFan::loop() {
-    // 循环逻辑（保持为空）
-}
+void BLEFan::setup() {}
+void BLEFan::loop() {}
 
 fan::FanTraits BLEFan::get_traits() {
-    // 参数: 摇头(false), 调速(true), 正反转(true), 6个档位
     return fan::FanTraits(false, true, true, 6);
 }
 
@@ -63,13 +56,18 @@ void BLEFan::control(const fan::FanCall &call) {
         }
     }
 
-    // 更新 HA 状态
-    auto state_call = this->make_call();
-    state_call.set_state(target_state);
-    state_call.set_speed(target_speed);
-    state_call.set_direction(target_dir);
-    state_call.perform();
+    // ==========================================
+    // 【终极修正】：直接更新基类状态并发布！
+    // 绝对不要使用 make_call().perform()，那会导致无限死循环卡死 API！
+    // ==========================================
+    this->state = target_state;
+    this->speed = target_speed;
+    this->direction = target_dir;
+    
+    // 通知 Home Assistant 状态已更新
+    this->publish_state();
 
+    // 更新本地缓存
     last_state_ = target_state;
     last_speed_ = target_speed;
     last_direction_ = target_dir;
