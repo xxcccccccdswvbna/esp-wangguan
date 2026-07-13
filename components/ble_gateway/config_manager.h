@@ -1,10 +1,9 @@
 #pragma once
 
 
-#include "device_table.h"
+#include "device_model.h"
 
-
-#include <map>
+#include <vector>
 #include <string>
 
 
@@ -27,7 +26,7 @@ public:
 
     bool get_command(
         const std::string &name,
-        BLEDevice &cmd
+        BLEDevice &device
     );
 
 
@@ -35,7 +34,7 @@ public:
 private:
 
 
-    std::map<std::string, BLEDeviceCommand> commands_;
+    std::vector<BLEDevice> devices_;
 
 
 
