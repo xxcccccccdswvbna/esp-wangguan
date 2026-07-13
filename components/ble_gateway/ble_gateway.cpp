@@ -29,8 +29,40 @@ void BLEGateway::setup()
 
 
 
+
+
 void BLEGateway::loop()
 {
+
+
+    /*
+     * BLE GAP 冷却等待
+     *
+     * 防止连续切换广播导致
+     * ESP32 BLE 栈未释放
+     */
+    if(cooldown_)
+    {
+
+        if(
+            millis() - adv_stop_time_ < 800
+        )
+        {
+            return;
+        }
+
+
+        cooldown_ = false;
+
+
+        ESP_LOGI(
+            TAG,
+            "BLE GAP READY"
+        );
+
+    }
+
+
 
 
     /*
@@ -48,20 +80,34 @@ void BLEGateway::loop()
         adv_running_ = false;
 
 
+        adv_stop_time_ =
+            millis();
+
+
+        cooldown_ = true;
+
+
+
         ESP_LOGI(
             TAG,
             "BLE ADV STOP"
         );
 
 
+
         /*
          * 如果还有下一包
          */
-        if(!packet_queue_.empty())
+        if(
+            !packet_queue_.empty()
+        )
         {
 
+            /*
+             * 下一包等待1秒
+             */
             next_packet_time_ =
-                millis() + 500;
+                millis() + 1000;
 
 
             waiting_next_packet_ = true;
@@ -72,8 +118,10 @@ void BLEGateway::loop()
 
 
 
+
+
     /*
-     * 下一包发送
+     * 发送下一包
      */
     if(
         waiting_next_packet_ &&
@@ -101,6 +149,9 @@ void BLEGateway::loop()
 
 
 
+
+
+
 std::vector<uint8_t>
 BLEGateway::hex_to_bytes(
     const std::string &hex
@@ -112,6 +163,7 @@ BLEGateway::hex_to_bytes(
 
 
     std::string clean;
+
 
 
     /*
@@ -126,15 +178,18 @@ BLEGateway::hex_to_bytes(
             (c >= 'a' && c <= 'f')
         )
         {
+
             clean += c;
+
         }
 
     }
 
 
 
+
     for(
-        size_t i=0;
+        size_t i = 0;
         i + 1 < clean.length();
         i += 2
     )
@@ -154,9 +209,12 @@ BLEGateway::hex_to_bytes(
     }
 
 
+
     return data;
 
 }
+
+
 
 
 
@@ -178,25 +236,32 @@ void BLEGateway::send_hex(
 
 
 
+
+
     /*
-     * 1.
-     * 先查设备配置
+     * 命令模式
      *
      * 例如:
      *
      * light_toggle
      *
+     * 从 config_manager
+     * 查找设备配置
      */
     BLEDeviceCommand cmd;
 
 
+
     if(
+        hex.find("|") == std::string::npos &&
+        hex.find("020102") != 0 &&
         config_manager_.get_command(
             hex,
             cmd
         )
     )
     {
+
 
         ESP_LOGI(
             TAG,
@@ -205,12 +270,13 @@ void BLEGateway::send_hex(
         );
 
 
+
         std::string packets;
 
 
 
         for(
-            size_t i=0;
+            size_t i = 0;
             i < cmd.packets.size();
             i++
         )
@@ -222,14 +288,18 @@ void BLEGateway::send_hex(
             }
 
 
-            packets += cmd.packets[i];
+
+            packets +=
+                cmd.packets[i];
 
         }
 
 
 
+
         /*
-         * 转HEX发送
+         * 转成 HEX|HEX
+         * 进入发送流程
          */
         send_hex(
             packets
@@ -242,12 +312,14 @@ void BLEGateway::send_hex(
 
 
 
+
+
+
+
     /*
-     * 2.
-     * 多包
+     * 多包发送
      *
      * HEX|HEX
-     *
      */
     if(
         hex.find("|") != std::string::npos
@@ -274,7 +346,9 @@ void BLEGateway::send_hex(
 
 
 
-            if(pos == std::string::npos)
+            if(
+                pos == std::string::npos
+            )
             {
 
                 packet_queue_.push_back(
@@ -288,10 +362,11 @@ void BLEGateway::send_hex(
 
 
 
+
             packet_queue_.push_back(
                 hex.substr(
                     start,
-                    pos-start
+                    pos - start
                 )
             );
 
@@ -300,11 +375,19 @@ void BLEGateway::send_hex(
             start =
                 pos + 1;
 
+
         }
 
 
 
+
+
+
+        /*
+         * 立即发送第一包
+         */
         send_next_packet();
+
 
 
         return;
@@ -314,9 +397,12 @@ void BLEGateway::send_hex(
 
 
 
+
+
+
+
     /*
-     * 3.
-     * 单HEX包
+     * 单包HEX
      */
     send_raw_packet(
         hex
@@ -324,17 +410,8 @@ void BLEGateway::send_hex(
 
 
 }
-
-
-
-
-
-
-
-
 void BLEGateway::send_next_packet()
 {
-
 
     if(
         packet_queue_.empty()
@@ -379,7 +456,6 @@ void BLEGateway::send_raw_packet(
 
 {
 
-
     ESP_LOGI(
         TAG,
         "BLE TX RAW:%s",
@@ -413,6 +489,8 @@ void BLEGateway::send_raw_packet(
 
 
 
+
+
     esp_err_t err =
         esp_ble_gap_config_adv_data_raw(
             data.data(),
@@ -432,20 +510,30 @@ void BLEGateway::send_raw_packet(
 
 
 
-    esp_ble_adv_params_t params={};
+
+
+    esp_ble_adv_params_t params = {};
 
 
 
+    /*
+     * 广播间隔
+     */
     params.adv_int_min =
-        0x20;
-
-
-    params.adv_int_max =
         0x40;
 
 
+    params.adv_int_max =
+        0x80;
+
+
+
+    /*
+     * 不连接广播
+     */
     params.adv_type =
         ADV_TYPE_NONCONN_IND;
+
 
 
     params.channel_map =
@@ -484,6 +572,7 @@ void BLEGateway::send_raw_packet(
 
 
 
+
 bool BLEGateway::parse_status(
     std::string hex
 )
@@ -500,6 +589,8 @@ bool BLEGateway::parse_status(
     return true;
 
 }
+
+
 
 
 
