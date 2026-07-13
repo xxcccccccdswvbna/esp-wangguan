@@ -40,7 +40,7 @@ void BLEGateway::loop()
 
     if(
         adv_running_ &&
-        millis() - adv_start_time_ > 50
+        millis() - adv_start_time_ > 100
     )
     {
 
@@ -64,7 +64,7 @@ void BLEGateway::loop()
         {
 
             next_packet_time_ =
-                millis() + 100;
+                millis() + 500;
 
 
             waiting_next_packet_ = true;
