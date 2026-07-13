@@ -15,9 +15,7 @@ BLELight = ble_gateway_ns.class_(
 CONF_DEVICE = "device"
 
 
-CONFIG_SCHEMA = light.light_schema(
-    BLELight
-).extend(
+CONFIG_SCHEMA = light.LIGHT_SCHEMA.extend(
     {
         cv.Required(CONF_DEVICE): cv.string,
     }
