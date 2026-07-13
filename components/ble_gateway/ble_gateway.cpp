@@ -228,23 +228,21 @@ void BLEGateway::send_hex(
 
 
 
-
     /*
-     * 命令模式
+     * 1.
+     * HA动作命令
      *
-     * 例如:
+     * 格式:
      *
      * light.room1.on
      *
      */
-
 
     if(
         hex.find("020102") != 0 &&
         hex.find("|") == std::string::npos
     )
     {
-
 
         size_t pos =
             hex.rfind(".");
@@ -255,7 +253,6 @@ void BLEGateway::send_hex(
         )
         {
 
-
             std::string device_id =
                 hex.substr(
                     0,
@@ -263,12 +260,10 @@ void BLEGateway::send_hex(
                 );
 
 
-
             std::string action_name =
                 hex.substr(
                     pos + 1
                 );
-
 
 
             BLEAction action;
@@ -284,7 +279,6 @@ void BLEGateway::send_hex(
             )
             {
 
-
                 ESP_LOGI(
                     TAG,
                     "COMMAND FOUND:%s",
@@ -297,32 +291,20 @@ void BLEGateway::send_hex(
 
 
 
-for(
-    size_t i=0;
-    i < action.packets.size();
-    i++
-)
-{
+                for(
+                    size_t i = 0;
+                    i < action.packets.size();
+                    i++
+                )
+                {
 
-    ESP_LOGI(
-        TAG,
-        "ACTION PACKET:%s",
-        action.packets[i].c_str()
-    );
-
-
-    if(i>0)
-        packets += "|";
-
-
-    packets += action.packets[i];
-
-}
-
-                    if(i>0)
+                    if(
+                        i > 0
+                    )
                     {
                         packets += "|";
                     }
+
 
 
                     packets +=
@@ -333,7 +315,7 @@ for(
 
 
                 /*
-                 * 转HEX发送
+                 * 重新进入HEX发送流程
                  */
                 send_hex(
                     packets
@@ -344,14 +326,31 @@ for(
 
             }
 
+
         }
 
+
+        ESP_LOGW(
+            TAG,
+            "device command not found:%s",
+            hex.c_str()
+        );
+
+
+        return;
+
     }
+
+
+
+
     /*
+     * 2.
      * 多包HEX
      *
-     * HEX|HEX|HEX
+     * HEX|HEX
      */
+
     if(
         hex.find("|") != std::string::npos
     )
@@ -369,12 +368,12 @@ for(
         while(true)
         {
 
+
             size_t pos =
                 hex.find(
                     "|",
                     start
                 );
-
 
 
             if(
@@ -396,40 +395,35 @@ for(
             packet_queue_.push_back(
                 hex.substr(
                     start,
-                    pos - start
+                    pos-start
                 )
             );
-
 
 
             start =
                 pos + 1;
 
+
         }
 
 
 
-
-
-        /*
-         * 立即发送第一包
-         */
         send_next_packet();
 
 
         return;
+
 
     }
 
 
 
 
-
-
-
     /*
-     * 单HEX
+     * 3.
+     * 单包HEX
      */
+
     send_raw_packet(
         hex
     );
