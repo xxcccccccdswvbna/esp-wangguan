@@ -6,7 +6,6 @@ from esphome.const import CONF_ID
 
 DEPENDENCIES = [
     "esp32_ble_tracker",
-    "light",
 ]
 
 
