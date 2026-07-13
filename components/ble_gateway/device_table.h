@@ -1,6 +1,9 @@
 #pragma once
 
+
 #include "device_model.h"
+
+#include <vector>
 
 
 namespace esphome {
@@ -15,6 +18,7 @@ public:
     static void load(
         std::vector<BLEDevice> &devices
     );
+
 
 };
 
