@@ -1,7 +1,6 @@
 import esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome.components import fan
-# 【修正】在这里加上 CONF_NAME 的导入
 from esphome.const import CONF_ID, CONF_NAME
 
 DEPENDENCIES = ["ble_gateway"]
@@ -9,19 +8,19 @@ DEPENDENCIES = ["ble_gateway"]
 ble_fan_ns = cg.esphome_ns.namespace("ble_fan")
 ble_gateway_ns = cg.esphome_ns.namespace("ble_gateway")
 
-# BLEFan 继承自 fan::Fan (即 FanState)
 BLEFan = ble_fan_ns.class_("BLEFan", cg.Component, fan.Fan)
 BLEGateway = ble_gateway_ns.class_("BLEGateway", cg.Component)
 
 CONF_BLE_DEVICE_ID = "ble_device_id"
 CONF_GATEWAY = "gateway"
 
+# 【修正】继承 cv.ENTITY_BASE_SCHEMA，自动补全 disabled_by_default 等实体基础配置
 CONFIG_SCHEMA = cv.Schema({
     cv.GenerateID(): cv.declare_id(BLEFan),
     cv.Required(CONF_NAME): cv.string,
     cv.Required(CONF_BLE_DEVICE_ID): cv.string,
     cv.Required(CONF_GATEWAY): cv.use_id(BLEGateway),
-}).extend(cv.COMPONENT_SCHEMA)
+}).extend(cv.COMPONENT_SCHEMA).extend(cv.ENTITY_BASE_SCHEMA)
 
 async def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID])
