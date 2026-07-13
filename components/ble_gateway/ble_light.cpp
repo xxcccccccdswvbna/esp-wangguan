@@ -7,7 +7,6 @@ namespace esphome {
 namespace ble_gateway {
 
 
-
 static const char *TAG="ble_light";
 
 
@@ -18,9 +17,6 @@ light::LightTraits BLELight::get_traits()
     auto traits =
         light::LightTraits();
 
-
-
-    // 支持亮度
 
     traits.set_supported_color_modes(
         {
@@ -39,6 +35,7 @@ light::LightTraits BLELight::get_traits()
 void BLELight::write_state(
     light::LightState *state
 )
+
 {
 
 
@@ -51,12 +48,29 @@ void BLELight::write_state(
 
 
 
+    if(
+        gateway_ == nullptr
+    )
+    {
+
+        ESP_LOGE(
+            TAG,
+            "gateway not set"
+        );
+
+
+        return;
+
+    }
+
+
+
     if(on)
     {
 
         ESP_LOGI(
             TAG,
-            "LIGHT ON"
+            "SEND ON"
         );
 
 
@@ -64,14 +78,13 @@ void BLELight::write_state(
             device_id_ + ".on"
         );
 
-
     }
     else
     {
 
         ESP_LOGI(
             TAG,
-            "LIGHT OFF"
+            "SEND OFF"
         );
 
 
@@ -80,7 +93,6 @@ void BLELight::write_state(
         );
 
     }
-
 
 
 }
