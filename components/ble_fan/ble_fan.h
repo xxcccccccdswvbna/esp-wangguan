@@ -9,8 +9,9 @@ namespace ble_fan {
 
 class BLEFan : public fan::Fan, public Component {
 public:
-    void setup() override {}
-    void loop() override {}
+    // 【修正】只声明，不加 {}
+    void setup() override;
+    void loop() override;
 
     void set_gateway(ble_gateway::BLEGateway *gateway) { gateway_ = gateway; }
     void set_device_id(const std::string &device_id) { device_id_ = device_id; }
@@ -18,7 +19,7 @@ public:
     fan::FanTraits get_traits() override;
     void control(const fan::FanCall &call) override;
 
-    // 【新增】从 BLE 广播更新状态
+    // 【新增】从 BLE 广播更新状态的声明
     void update_from_ble(bool is_on, int speed, bool is_forward);
 
 protected:
