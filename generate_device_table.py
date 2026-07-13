@@ -31,7 +31,7 @@ def generate_all(config_dir, base_dir):
     print(f"🚀 正在生成代码 (共 {len(devices)} 个物理设备)...")
 
     # ==========================================
-    # 1. 生成 C++ device_table.cpp
+    # 1. 生成 C++ device_table.cpp (保持不变)
     # ==========================================
     cpp_code = """#include "device_table.h"
 
@@ -42,8 +42,6 @@ void DeviceTable::load(std::vector<BLEDevice> &devices) {
 """
     for dev in devices:
         dev_name = dev['name']
-        
-        # 处理灯
         if 'light' in dev:
             light_id = dev['light']['id']
             cpp_code += f"\n    add_device(devices, \"{light_id}\", \"light\", \"{dev_name} Light\");\n"
@@ -52,8 +50,6 @@ void DeviceTable::load(std::vector<BLEDevice> &devices) {
                 if packets_clean:
                     packets_str = ",\n        ".join([f'"{p}"' for p in packets_clean])
                     cpp_code += f"    add_action(devices, \"{light_id}\", \"{action}\", {{\n        {packets_str}\n    }});\n"
-                    
-        # 处理风扇
         if 'fan' in dev:
             fan_id = dev['fan']['id']
             cpp_code += f"\n    add_device(devices, \"{fan_id}\", \"fan\", \"{dev_name} Fan\");\n"
@@ -65,7 +61,6 @@ void DeviceTable::load(std::vector<BLEDevice> &devices) {
 
     cpp_code += """
 }
-
 void DeviceTable::add_device(std::vector<BLEDevice> &devices, std::string id, std::string type, std::string name) {
     BLEDevice device; device.id = id; device.type = type; device.name = name; devices.push_back(device);
 }
@@ -83,25 +78,29 @@ void DeviceTable::add_action(std::vector<BLEDevice> &devices, std::string device
         f.write(cpp_code)
 
     # ==========================================
-    # 2. 生成 auto_entities.yaml
+    # 2. 【修复】生成合法的 auto_entities.yaml
     # ==========================================
-    yaml_entities = "binary_sensor:\nsensor:\ntext_sensor:\nlight:\nfan:\n"
+    binary_sensors = []
+    sensors = []
+    text_sensors = []
+    lights = []
+    fans = []
 
     for dev in devices:
         safe_id = dev['id'].replace('.', '_')
         name_prefix = dev['name']
         
-        # 生成状态传感器 (因为灯和风扇状态在同一个广播包里，所以一起生成)
-        yaml_entities += f"""
-  - platform: template
+        # 状态传感器
+        binary_sensors.append(f"""  - platform: template
     id: {safe_id}_led_state
     name: "{name_prefix} LED"
     device_class: light
   - platform: template
     id: {safe_id}_fan_state
     name: "{name_prefix} 风扇状态"
-    device_class: running
-  - platform: template
+    device_class: running""")
+        
+        sensors.append(f"""  - platform: template
     id: {safe_id}_brightness
     name: "{name_prefix} 亮度"
     unit_of_measurement: "%"
@@ -119,36 +118,42 @@ void DeviceTable::add_action(std::vector<BLEDevice> &devices, std::string device
     id: {safe_id}_timer
     name: "{name_prefix} 定时"
     unit_of_measurement: "min"
-    accuracy_decimals: 0
-  - platform: template
+    accuracy_decimals: 0""")
+        
+        text_sensors.append(f"""  - platform: template
     id: {safe_id}_fan_direction
-    name: "{name_prefix} 风扇方向"
-"""
-        # 生成控制实体 (根据 JSON 中是否有 light/fan 节点决定)
+    name: "{name_prefix} 风扇方向\"""")
+        
+        # 控制实体
         if 'light' in dev:
             light_id = dev['light']['id']
-            yaml_entities += f"""
-  - platform: ble_light
+            lights.append(f"""  - platform: ble_light
     id: {safe_id}_light_ctrl
     name: "{name_prefix} 灯"
     ble_device_id: "{light_id}"
-    gateway: ct1_ble
-"""
+    gateway: ct1_ble""")
+            
         if 'fan' in dev:
             fan_id = dev['fan']['id']
-            yaml_entities += f"""
-  - platform: ble_fan
+            fans.append(f"""  - platform: ble_fan
     id: {safe_id}_fan_ctrl
     name: "{name_prefix} 风扇"
     ble_device_id: "{fan_id}"
-    gateway: ct1_ble
-"""
+    gateway: ct1_ble""")
+
+    # 拼接成绝对合法的 YAML
+    yaml_entities = ""
+    if binary_sensors: yaml_entities += "binary_sensor:\n" + "\n".join(binary_sensors) + "\n\n"
+    if sensors: yaml_entities += "sensor:\n" + "\n".join(sensors) + "\n\n"
+    if text_sensors: yaml_entities += "text_sensor:\n" + "\n".join(text_sensors) + "\n\n"
+    if lights: yaml_entities += "light:\n" + "\n".join(lights) + "\n\n"
+    if fans: yaml_entities += "fan:\n" + "\n".join(fans) + "\n\n"
 
     with open(os.path.join(base_dir, "auto_entities.yaml"), 'w', encoding='utf-8') as f:
         f.write(yaml_entities)
 
     # ==========================================
-    # 3. 生成 auto_tracker.yaml (BLE 监听路由)
+    # 3. 生成 auto_tracker.yaml (保持不变)
     # ==========================================
     tracker_code = """esp32_ble_tracker:
   scan_parameters:
@@ -164,7 +169,6 @@ void DeviceTable::add_action(std::vector<BLEDevice> &devices, std::string device
                 if (raw.size() < 20) continue; 
                 if (raw[0] != 0x81 || raw[1] != 0x53) continue;
 
-                // 解析通用状态 (灯和风扇共用同一个广播包)
                 uint8_t mode = raw[11];
                 bool led_on = (mode & 0x01) != 0;
                 bool fan_on = !(mode == 0x10 || mode == 0x11);
@@ -184,7 +188,6 @@ void DeviceTable::add_action(std::vector<BLEDevice> &devices, std::string device
         mac_array = "{" + ", ".join([f"0x{b}" for b in reversed(mac_bytes)]) + "}"
         
         tracker_code += f"""
-                // 路由: {dev['name']} ({dev['mac']})
                 uint8_t mac_target_{safe_id}[6] = {mac_array};
                 if (memcmp(current_mac, mac_target_{safe_id}, 6) == 0) {{
                     id({safe_id}_led_state).publish_state(led_on);
