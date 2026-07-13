@@ -5,15 +5,12 @@
 #include "esphome/core/log.h"
 
 
-
 namespace esphome {
 namespace ble_gateway {
 
 
-
 static const char *TAG =
     "config_manager";
-
 
 
 
@@ -23,11 +20,9 @@ void ConfigManager::load()
     devices_.clear();
 
 
-
     DeviceTable::load(
         devices_
     );
-
 
 
     ESP_LOGI(
@@ -41,32 +36,72 @@ void ConfigManager::load()
 
 
 
-bool ConfigManager::get_command(
-    const std::string &name,
-    BLEDevice &device
+bool ConfigManager::get_action(
+    const std::string &command,
+    BLEAction &action
 )
 
 {
 
 
+    size_t pos =
+        command.rfind(".");
+
+
+    if(
+        pos == std::string::npos
+    )
+    {
+        return false;
+    }
+
+
+
+    std::string device_id =
+        command.substr(
+            0,
+            pos
+        );
+
+
+    std::string action_name =
+        command.substr(
+            pos + 1
+        );
+
+
+
     for(
-        auto &dev : devices_
+        auto &device : devices_
     )
     {
 
-
         if(
-            dev.id == name
+            device.id == device_id
         )
         {
 
-            device = dev;
+
+            auto it =
+                device.actions.find(
+                    action_name
+                );
 
 
-            return true;
+            if(
+                it != device.actions.end()
+            )
+            {
+
+                action =
+                    it->second;
+
+
+                return true;
+
+            }
 
         }
-
 
     }
 
@@ -74,8 +109,8 @@ bool ConfigManager::get_command(
 
     ESP_LOGW(
         TAG,
-        "device not found:%s",
-        name.c_str()
+        "action not found:%s",
+        command.c_str()
     );
 
 
