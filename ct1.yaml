@@ -91,9 +91,4 @@ esp32_ble_tracker:
 ble_gateway:
   id: ct1_ble
 
-light:
-  - platform: ble_gateway
-    name: "卧室灯"
-    device: "light.room1"
-    gateway_id: ct1_ble
   
