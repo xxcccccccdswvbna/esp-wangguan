@@ -6,21 +6,15 @@ namespace ble_light {
 
 static const char *TAG = "ble_light";
 
-// 告诉 HA 这个灯支持什么功能（亮度、色温）
+// 告诉 HA 这个灯支持什么功能
 light::LightTraits BLELight::get_traits() {
     auto traits = light::LightTraits();
-    // 支持亮度和色温模式
     traits.set_supported_color_modes({
         light::ColorMode::BRIGHTNESS, 
         light::ColorMode::COLOR_TEMPERATURE
     });
-    
-    // 色温范围 (单位: mireds)
-    // 153 mireds ≈ 6500K (冷白)
-    // 370 mireds ≈ 2700K (暖黄)
-    traits.set_min_mireds(153.0f); 
-    traits.set_max_mireds(370.0f); 
-    
+    traits.set_min_mireds(153.0f); // 6500K
+    traits.set_max_mireds(370.0f); // 2700K
     return traits;
 }
 
@@ -31,51 +25,75 @@ void BLELight::write_state(light::LightState *state) {
         return;
     }
 
-    // 获取 HA 传来的目标状态 (remote_values 是目标值，current_values 是渐变过程中的当前值)
     auto values = state->remote_values;
-    
-    bool is_on = values.is_on();
-    float brightness = values.get_brightness(); // 0.0 ~ 1.0
-    float color_temp = values.get_color_temperature(); // mireds (153 ~ 370)
+    bool target_on = values.is_on();
+    float brightness = values.get_brightness();
+    float color_temp = values.get_color_temperature();
 
-    ESP_LOGI(TAG, "Received state: on=%d, bright=%.2f, temp=%.2f", is_on, brightness, color_temp);
+    // 1. 计算本次需要发送的指令
+    std::string target_bright_action = map_brightness(brightness);
+    std::string target_temp_action = map_color_temp(color_temp);
 
-    std::string action = "";
+    // ==========================================
+    // 【核心优化 1】：状态缓存 & 指令去重
+    // ==========================================
+    // 如果开关状态没变，且(灯是关的，或者 亮度和色温指令都没变)，则直接跳过！
+    if (target_on == is_currently_on_) {
+        if (!target_on || (target_bright_action == last_brightness_action_ && 
+                           target_temp_action == last_color_temp_action_)) {
+            ESP_LOGD(TAG, "State unchanged, skipping BLE send.");
+            return; // 绝不重发相同的指令
+        }
+    }
 
-    if (!is_on) {
-        // 如果是关灯，直接发 off
-        action = "off";
+    // ==========================================
+    // 【核心优化 2】：时间节流 (防抖)
+    // ==========================================
+    // 限制最小发送间隔为 500ms，防止拖动滑块时 BLE 队列爆炸
+    uint32_t now = millis();
+    if (now - last_send_time_ < 500) { 
+        ESP_LOGD(TAG, "Throttled: sending too fast, skipping.");
+        return; 
+    }
+
+    ESP_LOGI(TAG, "Received state: on=%d, bright=%.2f, temp=%.2f", target_on, brightness, color_temp);
+
+    // ==========================================
+    // 执行发送逻辑
+    // ==========================================
+    if (!target_on) {
+        // 关灯
+        std::string cmd = device_id_ + ".off";
+        ESP_LOGI(TAG, "Sending Action: %s", cmd.c_str());
+        gateway_->handle_command(cmd);
     } else {
-        // 如果是开灯，需要组合亮度和色温动作
-        // 注意：米家灯通常需要先发色温，再发亮度，或者一起发。
-        // 这里我们先发色温，再发亮度。
-        
-        std::string temp_action = map_color_temp(color_temp);
-        std::string bright_action = map_brightness(brightness);
-
-        // 先发送色温指令
-        if (!temp_action.empty()) {
-            std::string cmd_temp = device_id_ + "." + temp_action;
+        // 开灯：先发色温，再发亮度
+        if (target_temp_action != last_color_temp_action_ || !is_currently_on_) {
+            std::string cmd_temp = device_id_ + "." + target_temp_action;
             ESP_LOGI(TAG, "Sending Color Temp: %s", cmd_temp.c_str());
             gateway_->handle_command(cmd_temp);
         }
 
-        // 再发送亮度指令 (作为最终 action 返回，用于日志记录)
-        action = bright_action;
+        if (target_bright_action != last_brightness_action_ || !is_currently_on_) {
+            std::string cmd_bright = device_id_ + "." + target_bright_action;
+            ESP_LOGI(TAG, "Sending Action: %s", cmd_bright.c_str());
+            gateway_->handle_command(cmd_bright);
+        }
     }
 
-    // 发送最终动作 (如果是关灯，这里就是 "off"；如果是开灯，这里发亮度)
-    if (!action.empty()) {
-        std::string cmd = device_id_ + "." + action;
-        ESP_LOGI(TAG, "Sending Action: %s", cmd.c_str());
-        gateway_->handle_command(cmd);
-    }
+    // ==========================================
+    // 【核心优化 3】：更新状态缓存
+    // ==========================================
+    is_currently_on_ = target_on;
+    last_brightness_action_ = target_bright_action;
+    last_color_temp_action_ = target_temp_action;
+    last_send_time_ = now; // 记录本次发送时间
 }
 
 // 亮度映射算法 (0.0 ~ 1.0 映射到预设的档位)
 std::string BLELight::map_brightness(float brightness) {
     if (brightness < 0.05f) return "brightness_1";
-    if (brightness < 0.15f) return "brightness_1"; // 0~15% 都算 1%
+    if (brightness < 0.15f) return "brightness_1"; 
     if (brightness < 0.30f) return "brightness_20";
     if (brightness < 0.45f) return "brightness_40";
     if (brightness < 0.55f) return "brightness_50";
@@ -85,7 +103,6 @@ std::string BLELight::map_brightness(float brightness) {
 }
 
 // 色温映射算法 (mireds 映射到预设的 K 值)
-// mireds 越小越冷，越大越暖
 std::string BLELight::map_color_temp(float mireds) {
     if (mireds < 200.0f) return "color_6500";  // 冷白
     if (mireds < 280.0f) return "color_3500";  // 自然白
