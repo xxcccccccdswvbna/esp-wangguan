@@ -115,7 +115,7 @@ esp32_ble_tracker:
 
                 uint8_t current_mac[6] = {raw[8], raw[7], raw[6], raw[5], raw[4], raw[3]};
 
-                uint8_t mac_target_device_diningroom[6] = {0x77, 0x88, 0x99, 0x70, 0x00, 0x00};
+                uint8_t mac_target_device_diningroom[6] = {0xCD, 0xAB, 0x38, 0x70, 0x00, 0x00};
                 if (memcmp(current_mac, mac_target_device_diningroom, 6) == 0) {
                     id(device_diningroom_led_state).publish_state(led_on);
                     id(device_diningroom_brightness).publish_state(brightness_pct);
