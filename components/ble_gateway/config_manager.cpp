@@ -7,59 +7,72 @@ namespace esphome {
 namespace ble_gateway {
 
 
-static const char *TAG =
-    "config_manager";
+
+static const char *TAG = "config_manager";
 
 
 
-bool ConfigManager::load()
+
+
+void ConfigManager::load()
 {
 
+
+    ESP_LOGI(
+        TAG,
+        "Loading device commands"
+    );
+
+
+
     /*
-     * 第一阶段先内置测试
+     * 灯开关
      *
-     * 后面替换成 SPIFFS/LittleFS JSON
+     * 后续所有设备
+     * 都在这里注册
      */
 
 
-    BLEDeviceCommand light;
+    BLEDeviceCommand light_toggle;
 
 
-    light.name =
+
+    light_toggle.name =
         "light_toggle";
 
 
-    light.delay =
-        800;
 
-
-    light.packets.push_back(
+    light_toggle.packets.push_back(
         "0201021BFFA806810F99CDAB38700000A939387670002078053DCDCDE31BA3"
     );
 
 
-    light.packets.push_back(
+    light_toggle.packets.push_back(
         "0201021BFFA806810F19CDAB38700000043CCDCDE31BABABA8383870700022"
     );
 
 
 
-    commands_.push_back(
-        light
-    );
+    commands_[
+        light_toggle.name
+    ] =
+        light_toggle;
+
+
 
 
 
     ESP_LOGI(
         TAG,
-        "commands loaded:%d",
+        "Loaded commands: %d",
         commands_.size()
     );
 
 
-    return true;
-
 }
+
+
+
 
 
 
@@ -73,31 +86,44 @@ bool ConfigManager::get_command(
 {
 
 
-    for(auto &item : commands_)
+    auto it =
+        commands_.find(
+            name
+        );
+
+
+
+    if(
+        it == commands_.end()
+    )
     {
 
-        if(item.name == name)
-        {
 
-            cmd=item;
+        ESP_LOGW(
+            TAG,
+            "command not found:%s",
+            name.c_str()
+        );
 
-            return true;
 
-        }
+        return false;
 
     }
 
 
-    ESP_LOGW(
-        TAG,
-        "command not found:%s",
-        name.c_str()
-    );
+
+    cmd =
+        it->second;
 
 
-    return false;
+
+    return true;
+
 
 }
+
+
+
 
 
 
