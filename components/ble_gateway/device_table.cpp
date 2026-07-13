@@ -1,72 +1,60 @@
 #include "device_table.h"
 
-#include "esphome/core/log.h"
-
-
 
 namespace esphome {
 namespace ble_gateway {
 
 
-
-static const char *TAG="device_table";
-
-
-
-
 void DeviceTable::load(
-    std::map<std::string, BLEDeviceCommand> &table
+    std::vector<BLEDevice> &devices
 )
-
 {
 
-
-    ESP_LOGI(
-        TAG,
-        "Loading device table"
-    );
+    BLEDevice light;
 
 
+    light.id =
+        "light.room1";
 
-    /*
-     * 房间灯
-     */
 
-    BLEDeviceCommand light;
-
+    light.type =
+        "light";
 
 
     light.name =
-        "light.room1.toggle";
+        "卧室灯";
 
 
 
-    light.packets.push_back(
-        "0201021BFFA806810F99CDAB38700000A939387670002078053DCDCDE31BA3"
+    BLEAction on;
+
+
+    on.name =
+        "on";
+
+
+    on.packets.push_back(
+        "0201021BFF114D1914F0CF2D70000001F1FC39CFCF9D2D2D7070005CBF1D68"
     );
 
 
-    light.packets.push_back(
-        "0201021BFFA806810F19CDAB38700000043CCDCDE31BABABA8383870700022"
+    on.packets.push_back(
+        "0201021BFF114D1911F0CF2D700000011C60F0F0FC3FCFCF9D2D2D7070005E"
     );
 
 
 
-    table[
-        light.name
-    ] =
-        light;
+    light.actions["on"]
+        =
+        on;
 
 
 
-    ESP_LOGI(
-        TAG,
-        "Device count:%d",
-        table.size()
+    devices.push_back(
+        light
     );
 
 }
-
 
 
 }
