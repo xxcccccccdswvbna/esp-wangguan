@@ -6,8 +6,14 @@ namespace ble_fan {
 
 static const char *TAG = "ble_fan";
 
-void BLEFan::setup() {}
-void BLEFan::loop() {}
+// 【修正】在这里实现空的 setup 和 loop
+void BLEFan::setup() {
+    // 初始化逻辑（保持为空）
+}
+
+void BLEFan::loop() {
+    // 循环逻辑（保持为空）
+}
 
 fan::FanTraits BLEFan::get_traits() {
     return fan::FanTraits(false, true, true, 6);
@@ -56,29 +62,20 @@ void BLEFan::control(const fan::FanCall &call) {
         }
     }
 
-    // ==========================================
-    // 【终极修正】：直接更新基类状态并发布！
-    // 绝对不要使用 make_call().perform()，那会导致无限死循环卡死 API！
-    // ==========================================
-    this->state = target_state;
-    this->speed = target_speed;
-    this->direction = target_dir;
-    
-    // 通知 Home Assistant 状态已更新
-    this->publish_state();
+    // 更新 HA 状态
+    auto state_call = this->make_call();
+    state_call.set_state(target_state);
+    state_call.set_speed(target_speed);
+    state_call.set_direction(target_dir);
+    state_call.perform();
 
-    // 更新本地缓存
     last_state_ = target_state;
     last_speed_ = target_speed;
     last_direction_ = target_dir;
     last_send_time_ = now;
 }
 
-} // namespace ble_fan
-} // namespace esphome
-// ... (前面的 setup, loop, get_traits, control 保持不变) ...
-
-// 【新增】从 BLE 广播更新状态
+// 【修正】必须加上 BLEFan:: 作用域限定符
 void BLEFan::update_from_ble(bool is_on, int speed, bool is_forward) {
     // 状态去重
     auto current_dir = is_forward ? fan::FanDirection::FORWARD : fan::FanDirection::REVERSE;
