@@ -1,0 +1,119 @@
+name: Build CT1 Firmware
+
+
+on:
+
+  workflow_dispatch:
+
+  push:
+
+    branches:
+      - main
+
+
+
+permissions:
+  contents: write
+
+
+
+jobs:
+
+
+  build:
+
+
+    runs-on: ubuntu-latest
+
+
+
+    steps:
+
+
+      # 拉取代码
+      - name: Checkout
+        uses: actions/checkout@v4
+
+
+
+      # 安装 Python
+      - name: Setup Python
+        uses: actions/setup-python@v5
+
+        with:
+
+          python-version: "3.11"
+
+
+
+      # 安装 ESPHome
+      - name: Install ESPHome
+        run: |
+
+          python -m pip install --upgrade pip
+
+          pip install esphome
+
+
+
+      # 编译
+      - name: Compile CT1
+        run: |
+
+          esphome compile ct1.yaml
+
+
+
+      # 收集固件
+      - name: Collect firmware files
+        run: |
+
+          mkdir -p firmware
+
+
+          cp .esphome/build/ct1/.pioenvs/ct1/firmware.bin firmware/
+
+          cp .esphome/build/ct1/.pioenvs/ct1/firmware.factory.bin firmware/
+
+          cp .esphome/build/ct1/.pioenvs/ct1/firmware.ota.bin firmware/
+
+
+          cp .esphome/build/ct1/.pioenvs/ct1/bootloader.bin firmware/
+
+          cp .esphome/build/ct1/.pioenvs/ct1/partitions.bin firmware/
+
+          cp .esphome/build/ct1/.pioenvs/ct1/ota_data_initial.bin firmware/
+
+
+          echo "===== Firmware ====="
+
+          ls -lh firmware
+
+
+
+      # 发布 Release
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+
+        with:
+
+          tag_name: ct1-${{ github.run_number }}
+
+          name: CT1 Firmware ${{ github.run_number }}
+
+          body: |
+
+            ESP32 CT1 自动编译固件
+
+            Commit:
+            ${{ github.sha }}
+
+
+          files: |
+
+            firmware/*.bin
+
+
+        env:
+
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
