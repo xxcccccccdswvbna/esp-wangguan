@@ -15,10 +15,10 @@ BLEGateway = ble_gateway_ns.class_("BLEGateway", cg.Component)
 CONF_BLE_DEVICE_ID = "ble_device_id"
 CONF_GATEWAY = "gateway"
 
-# 【终极修正】使用点号 (.) 访问枚举类，绝对不要使用 .enum()
-# fan_ns.FanRestoreMode 会强制生成 esphome::fan::FanRestoreMode::
-# 然后 .RESTORE_DEFAULT_OFF 会完美生成 esphome::fan::FanRestoreMode::RESTORE_DEFAULT_OFF
-FanRestoreMode = fan_ns.FanRestoreMode
+# 【终极修正】将 FanRestoreMode 声明为 namespace (命名空间)
+# 这样代码生成器在访问其内部的枚举值时，会强制使用 C++ 的 :: 作用域解析符
+# 从而完美生成 fan::FanRestoreMode::RESTORE_DEFAULT_OFF
+FanRestoreMode = fan_ns.namespace("FanRestoreMode")
 
 RESTORE_MODES = {
     "NO_RESTORE": FanRestoreMode.NO_RESTORE,
