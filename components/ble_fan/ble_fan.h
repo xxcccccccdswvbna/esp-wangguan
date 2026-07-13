@@ -7,9 +7,10 @@
 namespace esphome {
 namespace ble_fan {
 
+// 【关键】同时继承 fan::Fan 和 Component
 class BLEFan : public fan::Fan, public Component {
 public:
-    // 【修正】只声明，不加 {}
+    // 【关键】实现 Component 的虚函数，保证内存布局完整，防止运行时崩溃
     void setup() override;
     void loop() override;
 
@@ -18,9 +19,6 @@ public:
 
     fan::FanTraits get_traits() override;
     void control(const fan::FanCall &call) override;
-
-    // 【新增】从 BLE 广播更新状态的声明
-    void update_from_ble(bool is_on, int speed, bool is_forward);
 
 protected:
     ble_gateway::BLEGateway *gateway_{nullptr};
