@@ -110,8 +110,8 @@ ble_gateway:
 
 light:
   - platform: ble_light
-    # 【关键】这个 id 用于 lambda 中调用 update_from_ble
-    id: bedroom_light_output 
+    id: bedroom_light               # 这个 id 给 LightState (HA 看到的实体)
+    ble_output_id: bedroom_light_out # 【新增】这个 id 给 BLELight (用于在 lambda 中调用 update_from_ble)
     name: "卧室灯"
     ble_device_id: "light.room1"
     gateway: ct1_ble
