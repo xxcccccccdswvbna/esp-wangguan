@@ -4,12 +4,15 @@ import esphome.config_validation as cv
 from esphome.const import CONF_ID
 
 
-CODEOWNERS = ["@ct1"]
+DEPENDENCIES = [
+    "esp32_ble_tracker",
+]
 
-DEPENDENCIES = ["esp32"]
 
+ble_gateway_ns = cg.esphome_ns.namespace(
+    "ble_gateway"
+)
 
-ble_gateway_ns = cg.esphome_ns.namespace("ble_gateway")
 
 BLEGateway = ble_gateway_ns.class_(
     "BLEGateway",
@@ -19,8 +22,7 @@ BLEGateway = ble_gateway_ns.class_(
 
 CONFIG_SCHEMA = cv.Schema(
     {
-        cv.GenerateID(CONF_ID):
-        cv.declare_id(BLEGateway),
+        cv.GenerateID(): cv.declare_id(BLEGateway),
     }
 )
 

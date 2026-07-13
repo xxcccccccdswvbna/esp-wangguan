@@ -1,0 +1,9 @@
+{
+  "domain": "ble_gateway",
+  "name": "BLE Gateway",
+  "version": "1.0.0",
+  "dependencies": [
+    "light"
+  ],
+  "requirements": []
+}
