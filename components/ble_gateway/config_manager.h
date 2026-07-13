@@ -1,9 +1,11 @@
 #pragma once
 
+
 #include "device_model.h"
 
 #include <vector>
 #include <string>
+
 
 
 namespace esphome {
@@ -16,16 +18,21 @@ class ConfigManager
 
 public:
 
+
     void load();
 
 
-    bool get_command(
-        const std::string &id,
-        BLEAction &action
+
+    bool get_action(
+        const std::string &device_id,
+        const std::string &action,
+        BLEAction &result
     );
 
 
+
 private:
+
 
     std::vector<BLEDevice> devices_;
 
