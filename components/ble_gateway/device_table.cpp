@@ -190,8 +190,8 @@ void DeviceTable::load(std::vector<BLEDevice> &devices) {
 
     /* 风扇 关 */
     add_action(devices, "fan.room1", "off", {
-        "REPLACE_WITH_REAL_HEX_OFF_1",
-        "REPLACE_WITH_REAL_HEX_OFF_2"
+        "0201021BFF114D1912F0CF2D7000000161F0F9FC3FCFCF9D2D2D7070005CB4",
+        "0201021BFF114D1910F0CF2D70000001BE1D60F0F0FC3FCFCF9D2D2D707002"
     });
 
     /* 风扇 1档 */
