@@ -3,10 +3,7 @@ import esphome.config_validation as cv
 
 from esphome.components import light
 
-
-ble_gateway_ns = cg.esphome_ns.namespace(
-    "ble_gateway"
-)
+from . import ble_gateway_ns, BLEGateway
 
 
 BLELight = ble_gateway_ns.class_(
@@ -16,11 +13,16 @@ BLELight = ble_gateway_ns.class_(
 
 
 CONF_DEVICE = "device"
+CONF_GATEWAY_ID = "gateway_id"
 
 
 CONFIG_SCHEMA = light.LIGHT_SCHEMA.extend(
     {
         cv.Required(CONF_DEVICE): cv.string,
+
+        cv.Required(CONF_GATEWAY_ID): cv.use_id(
+            BLEGateway
+        ),
     }
 )
 
@@ -32,8 +34,26 @@ async def to_code(config):
     )
 
 
+    await light.register_light(
+        var,
+        config
+    )
+
+
     cg.add(
         var.set_device(
             config[CONF_DEVICE]
+        )
+    )
+
+
+    gateway = await cg.get_variable(
+        config[CONF_GATEWAY_ID]
+    )
+
+
+    cg.add(
+        var.set_gateway(
+            gateway
         )
     )
