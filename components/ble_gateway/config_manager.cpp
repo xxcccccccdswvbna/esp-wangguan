@@ -37,7 +37,7 @@ void ConfigManager::load()
 
 
 
-bool ConfigManager::get_command(
+bool ConfigManager::get_decice(
     const std::string &name,
     BLEDeviceCommand &cmd
 )
