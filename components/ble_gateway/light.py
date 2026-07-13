@@ -3,7 +3,10 @@ import esphome.config_validation as cv
 
 from esphome.components import light
 
-from . import ble_gateway_ns
+
+ble_gateway_ns = cg.esphome_ns.namespace(
+    "ble_gateway"
+)
 
 
 BLELight = ble_gateway_ns.class_(
