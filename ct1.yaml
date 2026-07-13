@@ -96,3 +96,13 @@ light:
     name: "卧室灯"
     ble_device_id: "light.room1"
     gateway: ct1_ble
+# ==========================================
+# 添加自定义 BLE 风扇实体
+# ==========================================
+fan:
+  - platform: ble_fan
+    id: my_bedroom_fan
+    name: "卧室风扇"
+    # 必须和 device_table.cpp 里的 id 一致
+    ble_device_id: "fan.room1"
+    gateway: ct1_ble
