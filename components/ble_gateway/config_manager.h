@@ -1,24 +1,16 @@
 #pragma once
 
-#include <string>
-#include <vector>
+
+#include "device_table.h"
+
+
 #include <map>
+#include <string>
+
 
 
 namespace esphome {
 namespace ble_gateway {
-
-
-
-struct BLEDeviceCommand
-{
-
-    std::string name;
-
-
-    std::vector<std::string> packets;
-
-};
 
 
 
