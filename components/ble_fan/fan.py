@@ -1,8 +1,7 @@
 import esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome.components import fan
-# 【核心修正】使用 CONF_OUTPUT_ID，与 LightOutput 架构完全对称
-from esphome.const import CONF_OUTPUT_ID, CONF_NAME, CONF_RESTORE_MODE
+from esphome.const import CONF_ID, CONF_NAME, CONF_RESTORE_MODE
 
 DEPENDENCIES = ["ble_gateway"]
 
@@ -10,8 +9,8 @@ ble_fan_ns = cg.esphome_ns.namespace("ble_fan")
 ble_gateway_ns = cg.esphome_ns.namespace("ble_gateway")
 fan_ns = cg.esphome_ns.namespace("fan")
 
-# 【核心修正】声明为 fan.FanOutput
-BLEFan = ble_fan_ns.class_("BLEFan", fan.FanOutput)
+# 【核心】只绑定 fan.Fan，绝对不要加 cg.Component！
+BLEFan = ble_fan_ns.class_("BLEFan", fan.Fan)
 BLEGateway = ble_gateway_ns.class_("BLEGateway", cg.Component)
 
 CONF_BLE_DEVICE_ID = "ble_device_id"
@@ -30,7 +29,7 @@ RESTORE_MODES = {
 }
 
 CONFIG_SCHEMA = cv.Schema({
-    cv.GenerateID(CONF_OUTPUT_ID): cv.declare_id(BLEFan),
+    cv.GenerateID(): cv.declare_id(BLEFan),
     cv.Required(CONF_NAME): cv.string,
     cv.Required(CONF_BLE_DEVICE_ID): cv.string,
     cv.Required(CONF_GATEWAY): cv.use_id(BLEGateway),
@@ -38,9 +37,9 @@ CONFIG_SCHEMA = cv.Schema({
 }).extend(cv.COMPONENT_SCHEMA).extend(cv.ENTITY_BASE_SCHEMA)
 
 async def to_code(config):
-    var = cg.new_Pvariable(config[CONF_OUTPUT_ID])
+    var = cg.new_Pvariable(config[CONF_ID])
     
-    await cg.register_component(var, config)
+    # 【核心】不要手动 register_component！fan.register_fan 内部已经完美处理了组件注册和生命周期！
     await fan.register_fan(var, config)
 
     gateway_var = await cg.get_variable(config[CONF_GATEWAY])
