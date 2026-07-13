@@ -170,6 +170,77 @@ void DeviceTable::load(std::vector<BLEDevice> &devices) {
             "0201021BFF114D191EF0CF2D70000001015CBF1D60F0F0FC3FCFCF9D2D2D72"
         }
     );
+       /*
+     * ==========================================
+     * 新增设备：卧室风扇
+     * ==========================================
+     */
+    add_device(
+        devices,
+        "fan.room1",
+        "fan",
+        "卧室风扇"
+    );
+
+    /* 风扇 开 */
+    add_action(devices, "fan.room1", "on", {
+        "REPLACE_WITH_REAL_HEX_ON_1",
+        "REPLACE_WITH_REAL_HEX_ON_2"
+    });
+
+    /* 风扇 关 */
+    add_action(devices, "fan.room1", "off", {
+        "REPLACE_WITH_REAL_HEX_OFF_1",
+        "REPLACE_WITH_REAL_HEX_OFF_2"
+    });
+
+    /* 风扇 1档 */
+    add_action(devices, "fan.room1", "speed_1", {
+        "REPLACE_WITH_REAL_HEX_SPEED1_1",
+        "REPLACE_WITH_REAL_HEX_SPEED1_2"
+    });
+
+    /* 风扇 2档 */
+    add_action(devices, "fan.room1", "speed_2", {
+        "REPLACE_WITH_REAL_HEX_SPEED2_1",
+        "REPLACE_WITH_REAL_HEX_SPEED2_2"
+    });
+
+    /* 风扇 3档 */
+    add_action(devices, "fan.room1", "speed_3", {
+        "REPLACE_WITH_REAL_HEX_SPEED3_1",
+        "REPLACE_WITH_REAL_HEX_SPEED3_2"
+    });
+
+    /* 风扇 4档 */
+    add_action(devices, "fan.room1", "speed_4", {
+        "REPLACE_WITH_REAL_HEX_SPEED4_1",
+        "REPLACE_WITH_REAL_HEX_SPEED4_2"
+    });
+
+    /* 风扇 5档 */
+    add_action(devices, "fan.room1", "speed_5", {
+        "REPLACE_WITH_REAL_HEX_SPEED5_1",
+        "REPLACE_WITH_REAL_HEX_SPEED5_2"
+    });
+
+    /* 风扇 6档 */
+    add_action(devices, "fan.room1", "speed_6", {
+        "REPLACE_WITH_REAL_HEX_SPEED6_1",
+        "REPLACE_WITH_REAL_HEX_SPEED6_2"
+    });
+
+    /* 风扇 正转 */
+    add_action(devices, "fan.room1", "forward", {
+        "REPLACE_WITH_REAL_HEX_FWD_1",
+        "REPLACE_WITH_REAL_HEX_FWD_2"
+    });
+
+    /* 风扇 反转 */
+    add_action(devices, "fan.room1", "reverse", {
+        "REPLACE_WITH_REAL_HEX_REV_1",
+        "REPLACE_WITH_REAL_HEX_REV_2"
+    }); 
 }
 
 void DeviceTable::add_device(
