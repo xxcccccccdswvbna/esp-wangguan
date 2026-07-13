@@ -16,15 +16,11 @@ BLELight = ble_gateway_ns.class_(
 CONF_DEVICE_ID = "device_id"
 
 
-
 CONFIG_SCHEMA = light.LIGHT_SCHEMA.extend(
     {
-        cv.Required(
-            CONF_DEVICE_ID
-        ): cv.string,
+        cv.Required(CONF_DEVICE_ID): cv.string,
     }
 )
-
 
 
 async def to_code(config):
@@ -33,21 +29,18 @@ async def to_code(config):
         config[cv.GenerateID()]
     )
 
-
     await cg.register_component(
         var,
         config
     )
-
 
     await light.register_light(
         var,
         config
     )
 
-
     cg.add(
-        var.set_device(
+        var.set_device_id(
             config[CONF_DEVICE_ID]
         )
     )
