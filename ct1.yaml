@@ -82,8 +82,8 @@ esp32_ble_tracker:
                 int kelvin = 2700 + (6500 - 2700) * color_percent;
                 float mireds = 1000000.0f / kelvin;
                 
-                // 4. 更新灯状态 (id 必须和下面 light 配置的 id 一致)
-                id(bedroom_light_output).update_from_ble(led_on, brightness, mireds);
+                # 4. 更新灯状态 (使用刚刚定义的 ble_output_id)
+                id(bedroom_light_out).update_from_ble(led_on, brightness, mireds);
                 
                 // 5. 解析风扇状态
                 bool fan_on = !(mode == 0x10 || mode == 0x11);
