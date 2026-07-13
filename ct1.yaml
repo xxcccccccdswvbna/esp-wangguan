@@ -96,8 +96,8 @@ ble_gateway:
 light:
   - platform: ble_light
     name: "卧室灯"
-    # 这里的 device_id 必须和 device_table.cpp 里 add_device 的 id 完全一致
-    device_id: "light.room1"
+    # 【修改】这里必须和 light.py 中的 CONF_BLE_DEVICE_ID 保持一致
+    ble_device_id: "light.room1"
     # 关联到上面定义的 ble_gateway 实例
     gateway: ct1_ble
   
