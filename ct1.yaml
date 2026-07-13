@@ -45,11 +45,11 @@ external_components:
       path: components
 
 # ==========================================
-# 1. 状态反馈：多设备传感器实体 (只读，用于 HA 显示)
+# 1. 状态反馈：多设备传感器实体 (已合并，避免 Duplicate key 错误)
 # ==========================================
 
-# --- 设备 1：卧室风扇灯 ---
 binary_sensor:
+  # --- 设备 1：卧室 ---
   - platform: template
     id: bedroom_led_state
     name: "卧室灯 LED 状态"
@@ -58,8 +58,18 @@ binary_sensor:
     id: bedroom_fan_state
     name: "卧室风扇 状态"
     device_class: running
+  # --- 设备 2：客厅 ---
+  - platform: template
+    id: livingroom_led_state
+    name: "客厅灯 LED 状态"
+    device_class: light
+  - platform: template
+    id: livingroom_fan_state
+    name: "客厅风扇 状态"
+    device_class: running
 
 sensor:
+  # --- 设备 1：卧室 ---
   - platform: template
     id: bedroom_brightness
     name: "卧室灯 亮度"
@@ -79,24 +89,7 @@ sensor:
     name: "卧室设备 定时"
     unit_of_measurement: "min"
     accuracy_decimals: 0
-
-text_sensor:
-  - platform: template
-    id: bedroom_fan_direction
-    name: "卧室风扇 方向"
-
-# --- 设备 2：客厅风扇灯 (复制上面的结构，改个前缀即可) ---
-binary_sensor:
-  - platform: template
-    id: livingroom_led_state
-    name: "客厅灯 LED 状态"
-    device_class: light
-  - platform: template
-    id: livingroom_fan_state
-    name: "客厅风扇 状态"
-    device_class: running
-
-sensor:
+  # --- 设备 2：客厅 ---
   - platform: template
     id: livingroom_brightness
     name: "客厅灯 亮度"
@@ -118,10 +111,14 @@ sensor:
     accuracy_decimals: 0
 
 text_sensor:
+  # --- 设备 1：卧室 ---
+  - platform: template
+    id: bedroom_fan_direction
+    name: "卧室风扇 方向"
+  # --- 设备 2：客厅 ---
   - platform: template
     id: livingroom_fan_direction
     name: "客厅风扇 方向"
-
 
 # ==========================================
 # 2. 核心：BLE 广播监听与多设备状态路由
@@ -178,7 +175,7 @@ esp32_ble_tracker:
 
                 // === 根据 MAC 地址路由到对应的传感器实体 ===
                 
-                // 【设备 1：卧室】 (请替换为你的真实 MAC)
+                // 【设备 1：卧室】 (请确保这里的 MAC 与你设备的真实 MAC 一致，全小写)
                 if (mac == "00:00:70:38:ab:cd") {
                     id(bedroom_led_state).publish_state(led_on);
                     id(bedroom_brightness).publish_state(brightness_pct);
@@ -188,7 +185,7 @@ esp32_ble_tracker:
                     id(bedroom_fan_direction).publish_state(fan_dir_str);
                     id(bedroom_timer).publish_state(timer_min);
                 } 
-                // 【设备 2：客厅】 (请替换为你的真实 MAC)
+                // 【设备 2：客厅】 (请确保这里的 MAC 与你设备的真实 MAC 一致，全小写)
                 else if (mac == "00:00:70:27:80:48") {
                     id(livingroom_led_state).publish_state(led_on);
                     id(livingroom_brightness).publish_state(brightness_pct);
@@ -203,21 +200,10 @@ esp32_ble_tracker:
             }
 
 # ==========================================
-# 3. 控制链路：BLE 网关
+# 3. 控制链路：BLE 网关与实体
 # ==========================================
 ble_gateway:
   id: ct1_ble
-
-# ==========================================
-# 4. 下行控制实体 (如果需要控制多个设备，在此处添加)
-# ==========================================
-# 示例：如果你要控制卧室灯
-# light:
-#   - platform: ble_light
-#     id: bedroom_light_ctrl
-#     name: "卧室灯 (控制)"
-#     ble_device_id: "light.room1"
-#     gateway: ct1_ble
 
 light:
   - platform: ble_light
