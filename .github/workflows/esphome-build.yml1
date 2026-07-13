@@ -1,0 +1,21 @@
+name: ESPHome Build
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      # 👇 【新增】在编译前，先运行脚本生成 device_table.cpp
+      - name: Generate Device Table from JSON
+        run: python generate_device_table.py
+
+      - name: Build ESPHome firmware
+        uses: esphome/build-action@v3.2.0
+        with:
+          yaml_file: ct1.yaml
