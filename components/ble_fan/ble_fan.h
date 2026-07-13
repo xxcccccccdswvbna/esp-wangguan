@@ -7,13 +7,9 @@
 namespace esphome {
 namespace ble_fan {
 
-// fan::Fan 本身已经继承自 Component，这里直接继承即可
-class BLEFan : public fan::Fan {
+// 【核心修正】继承 fan::FanOutput，而不是 fan::Fan！
+class BLEFan : public fan::FanOutput {
 public:
-    // 【关键】显式声明 setup 和 loop，保证内存布局完整
-    void setup() override;
-    void loop() override;
-
     void set_gateway(ble_gateway::BLEGateway *gateway) { gateway_ = gateway; }
     void set_device_id(const std::string &device_id) { device_id_ = device_id; }
 
