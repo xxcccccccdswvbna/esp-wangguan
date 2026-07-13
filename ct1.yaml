@@ -45,7 +45,7 @@ external_components:
       path: components
 
 # ==========================================
-# 1. 状态反馈：多设备传感器实体 (已添加 object_id 解决中文转 ASCII 冲突)
+# 1. 状态反馈：多设备传感器实体 (已移除无效的 object_id，依靠唯一的 id 避免冲突)
 # ==========================================
 
 binary_sensor:
@@ -53,24 +53,20 @@ binary_sensor:
   - platform: template
     id: bedroom_led_state
     name: "卧室灯 LED 状态"
-    object_id: "bedroom_led_state"
     device_class: light
   - platform: template
     id: bedroom_fan_state
     name: "卧室风扇 状态"
-    object_id: "bedroom_fan_state"
     device_class: running
     
   # --- 设备 2：客厅 ---
   - platform: template
     id: livingroom_led_state
     name: "客厅灯 LED 状态"
-    object_id: "livingroom_led_state"
     device_class: light
   - platform: template
     id: livingroom_fan_state
     name: "客厅风扇 状态"
-    object_id: "livingroom_fan_state"
     device_class: running
 
 sensor:
@@ -78,24 +74,20 @@ sensor:
   - platform: template
     id: bedroom_brightness
     name: "卧室灯 亮度"
-    object_id: "bedroom_brightness"
     unit_of_measurement: "%"
     accuracy_decimals: 0
   - platform: template
     id: bedroom_color_temp
     name: "卧室灯 色温"
-    object_id: "bedroom_color_temp"
     unit_of_measurement: "K"
     accuracy_decimals: 0
   - platform: template
     id: bedroom_fan_speed
     name: "卧室风扇 档位"
-    object_id: "bedroom_fan_speed"
     accuracy_decimals: 0
   - platform: template
     id: bedroom_timer
     name: "卧室设备 定时"
-    object_id: "bedroom_timer"
     unit_of_measurement: "min"
     accuracy_decimals: 0
     
@@ -103,24 +95,20 @@ sensor:
   - platform: template
     id: livingroom_brightness
     name: "客厅灯 亮度"
-    object_id: "livingroom_brightness"
     unit_of_measurement: "%"
     accuracy_decimals: 0
   - platform: template
     id: livingroom_color_temp
     name: "客厅灯 色温"
-    object_id: "livingroom_color_temp"
     unit_of_measurement: "K"
     accuracy_decimals: 0
   - platform: template
     id: livingroom_fan_speed
     name: "客厅风扇 档位"
-    object_id: "livingroom_fan_speed"
     accuracy_decimals: 0
   - platform: template
     id: livingroom_timer
     name: "客厅设备 定时"
-    object_id: "livingroom_timer"
     unit_of_measurement: "min"
     accuracy_decimals: 0
 
@@ -129,13 +117,11 @@ text_sensor:
   - platform: template
     id: bedroom_fan_direction
     name: "卧室风扇 方向"
-    object_id: "bedroom_fan_direction"
     
   # --- 设备 2：客厅 ---
   - platform: template
     id: livingroom_fan_direction
     name: "客厅风扇 方向"
-    object_id: "livingroom_fan_direction"
 
 # ==========================================
 # 2. 核心：BLE 广播监听与多设备状态路由
@@ -226,7 +212,6 @@ light:
   - platform: ble_light
     id: bedroom_light
     name: "卧室灯 (控制)"
-    object_id: "bedroom_light_ctrl"
     ble_device_id: "light.room1"
     gateway: ct1_ble
 
@@ -234,6 +219,5 @@ fan:
   - platform: ble_fan
     id: bedroom_fan
     name: "卧室风扇 (控制)"
-    object_id: "bedroom_fan_ctrl"
     ble_device_id: "fan.room1"
     gateway: ct1_ble
