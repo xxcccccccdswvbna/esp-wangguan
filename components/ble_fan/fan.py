@@ -7,6 +7,8 @@ DEPENDENCIES = ["ble_gateway"]
 
 ble_fan_ns = cg.esphome_ns.namespace("ble_fan")
 ble_gateway_ns = cg.esphome_ns.namespace("ble_gateway")
+# 【关键修正】使用 esphome_ns 获取 fan 命名空间，而不是 global_ns
+fan_ns = cg.esphome_ns.namespace("fan")
 
 BLEFan = ble_fan_ns.class_("BLEFan", cg.Component, fan.Fan)
 BLEGateway = ble_gateway_ns.class_("BLEGateway", cg.Component)
@@ -14,8 +16,8 @@ BLEGateway = ble_gateway_ns.class_("BLEGateway", cg.Component)
 CONF_BLE_DEVICE_ID = "ble_device_id"
 CONF_GATEWAY = "gateway"
 
-# 【关键修正】手动定义 restore_mode 的 C++ 枚举映射，绕过 ESPHome Python 层的 API 变动
-FanRestoreMode = cg.global_ns.namespace("fan").enum("FanRestoreMode")
+# 【关键修正】正确引用 FanRestoreMode 枚举，确保生成 fan::FanRestoreMode::XXX
+FanRestoreMode = fan_ns.enum("FanRestoreMode")
 RESTORE_MODES = {
     "NO_RESTORE": FanRestoreMode.NO_RESTORE,
     "RESTORE_DEFAULT_OFF": FanRestoreMode.RESTORE_DEFAULT_OFF,
@@ -31,7 +33,6 @@ CONFIG_SCHEMA = cv.Schema({
     cv.Required(CONF_NAME): cv.string,
     cv.Required(CONF_BLE_DEVICE_ID): cv.string,
     cv.Required(CONF_GATEWAY): cv.use_id(BLEGateway),
-    # 【关键修正】添加 restore_mode 配置，默认值为断电后默认关闭
     cv.Optional(CONF_RESTORE_MODE, default="RESTORE_DEFAULT_OFF"): cv.enum(RESTORE_MODES, upper=True, space="UNDERSCORE"),
 }).extend(cv.COMPONENT_SCHEMA).extend(cv.ENTITY_BASE_SCHEMA)
 
