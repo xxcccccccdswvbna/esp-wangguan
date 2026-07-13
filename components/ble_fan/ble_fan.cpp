@@ -8,11 +8,9 @@ static const char *TAG = "ble_fan";
 
 // 告诉 HA 这个风扇的特性
 fan::FanTraits BLEFan::get_traits() {
-    auto traits = fan::FanTraits();
-    traits.set_supports_oscillation(false); // 不支持摇头
-    traits.set_supports_direction(true);    // 支持正反转
-    traits.set_supported_speed_count(6);    // 支持 6 个档位
-    return traits;
+    // 【修正】使用构造函数初始化 FanTraits
+    // 参数顺序: oscillation (是否支持摇头), speed (是否支持调速), direction (是否支持正反转), supported_speed_count (支持的档位数量)
+    return fan::FanTraits(false, true, true, 6);
 }
 
 // 当 HA 下发控制指令时触发
@@ -44,7 +42,7 @@ void BLEFan::control(const fan::FanCall &call) {
         return; 
     }
 
-    ESP_LOGI(TAG, "Fan control: state=%d, speed=%d, dir=%d", target_state, target_speed, target_dir);
+    ESP_LOGI(TAG, "Fan control: state=%d, speed=%d, dir=%d", target_state, target_speed, (int)target_dir);
 
     // ==========================================
     // 执行发送逻辑
