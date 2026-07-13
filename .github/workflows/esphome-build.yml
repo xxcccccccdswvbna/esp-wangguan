@@ -9,13 +9,15 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      # 👇 1. 升级 checkout 到 v4 (官方推荐)
+      - uses: actions/checkout@v4
 
-      # 👇 【新增】在编译前，先运行脚本生成 device_table.cpp
+      # 👇 2. 运行 Python 脚本 (使用 python3 确保环境兼容)
       - name: Generate Device Table from JSON
-        run: python generate_device_table.py
+        run: python3 generate_device_table.py
 
+      # 👇 3. 升级 build-action 到 v4 (修复旧版 cache 被弃用的报错)
       - name: Build ESPHome firmware
-        uses: esphome/build-action@v3.2.0
+        uses: esphome/build-action@v4
         with:
           yaml_file: ct1.yaml
