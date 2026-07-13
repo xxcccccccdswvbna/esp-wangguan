@@ -61,6 +61,8 @@ class BLEGateway : public Component {
 
 private:
 
+    ConfigManager config_manager_;
+
     bool adv_running_{false};
 
     uint32_t adv_start_time_{0};
