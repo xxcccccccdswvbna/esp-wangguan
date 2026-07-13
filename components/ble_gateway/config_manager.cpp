@@ -27,7 +27,7 @@ void ConfigManager::load()
 
     ESP_LOGI(
         TAG,
-        "Config loaded:%d",
+        "devices loaded:%d",
         devices_.size()
     );
 
@@ -36,39 +36,11 @@ void ConfigManager::load()
 
 
 
-bool ConfigManager::get_action(
-    const std::string &command,
+bool ConfigManager::get_command(
+    const std::string &id,
     BLEAction &action
 )
-
 {
-
-
-    size_t pos =
-        command.rfind(".");
-
-
-    if(
-        pos == std::string::npos
-    )
-    {
-        return false;
-    }
-
-
-
-    std::string device_id =
-        command.substr(
-            0,
-            pos
-        );
-
-
-    std::string action_name =
-        command.substr(
-            pos + 1
-        );
-
 
 
     for(
@@ -76,25 +48,25 @@ bool ConfigManager::get_action(
     )
     {
 
-        if(
-            device.id == device_id
+
+        for(
+            auto &item : device.actions
         )
         {
 
 
-            auto it =
-                device.actions.find(
-                    action_name
-                );
+            std::string key =
+                device.id + "." + item.first;
+
 
 
             if(
-                it != device.actions.end()
+                key == id
             )
             {
 
                 action =
-                    it->second;
+                    item.second;
 
 
                 return true;
@@ -109,10 +81,9 @@ bool ConfigManager::get_action(
 
     ESP_LOGW(
         TAG,
-        "action not found:%s",
-        command.c_str()
+        "command not found:%s",
+        id.c_str()
     );
-
 
 
     return false;
