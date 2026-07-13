@@ -76,3 +76,25 @@ void BLEFan::control(const fan::FanCall &call) {
 
 } // namespace ble_fan
 } // namespace esphome
+// ... (前面的 setup, loop, get_traits, control 保持不变) ...
+
+// 【新增】从 BLE 广播更新状态
+void BLEFan::update_from_ble(bool is_on, int speed, bool is_forward) {
+    // 状态去重
+    auto current_dir = is_forward ? fan::FanDirection::FORWARD : fan::FanDirection::REVERSE;
+    if (this->state == is_on && this->speed == speed && this->direction == current_dir) {
+        return;
+    }
+
+    ESP_LOGI(TAG, "Sync from BLE: on=%d, speed=%d, dir=%d", is_on, speed, (int)current_dir);
+
+    this->state = is_on;
+    this->speed = speed;
+    this->direction = current_dir;
+    
+    // 直接发布状态给 HA，不会触发 control()
+    this->publish_state();
+}
+
+} // namespace ble_fan
+} // namespace esphome
