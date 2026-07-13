@@ -1,42 +1,11 @@
 #pragma once
 
-#include <string>
-#include <vector>
-#include <map>
+
+#include "device_model.h"
 
 
 namespace esphome {
 namespace ble_gateway {
-
-
-struct BLEAction
-{
-
-    std::string name;
-
-
-    std::vector<std::string> packets;
-
-};
-
-
-
-struct BLEDevice
-{
-
-    std::string id;
-
-
-    std::string type;
-
-
-    std::string name;
-
-
-    std::map<std::string, BLEAction> actions;
-
-};
-
 
 
 class DeviceTable
@@ -59,6 +28,7 @@ private:
         std::string type,
         std::string name
     );
+
 
 
     static void add_action(
