@@ -1,75 +1,71 @@
-#include "command_router.h"
-#include "ble_gateway.h"
+#include "config_manager.h"
+#include "device_table.h"
 
 
 namespace esphome {
 namespace ble_gateway {
 
 
-void CommandRouter::set_gateway(
-    BLEGateway *gateway
-)
+void ConfigManager::load()
 {
-    gateway_ = gateway;
+
+    DeviceTable table;
+
+
+    table.load(
+        devices_
+    );
+
 }
 
 
 
-void CommandRouter::set_config(
-    ConfigManager *config
+bool ConfigManager::get_action(
+    const std::string &device_id,
+    const std::string &action,
+    BLEAction &result
 )
 {
-    config_ = config;
-}
-
-
-
-bool CommandRouter::send_command(
-    std::string device,
-    std::string action
-)
-{
-
-    if(
-        !gateway_ ||
-        !config_
-    )
-    {
-        return false;
-    }
-
-
-    BLEAction result;
-
-
-    if(
-        !config_->get_action(
-            device,
-            action,
-            result
-        )
-    )
-    {
-        return false;
-    }
-
 
     for(
-        auto &packet :
-        result.packets
+        auto &device :
+        devices_
     )
     {
 
-        gateway_->send_hex(
-            packet
-        );
+
+        if(
+            device.id == device_id
+        )
+        {
+
+            auto it =
+            device.actions.find(
+                action
+            );
+
+
+            if(
+                it != device.actions.end()
+            )
+            {
+
+                result =
+                it->second;
+
+                return true;
+
+            }
+
+        }
 
     }
 
 
-    return true;
+    return false;
 
 }
+
 
 
 }
