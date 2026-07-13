@@ -45,83 +45,84 @@ external_components:
       path: components
 
 # ==========================================
-# 1. 状态反馈：多设备传感器实体 (通过在 name 中加入数字解决中文转 ASCII 冲突)
+# 1. 状态反馈：多设备传感器实体 (全英文命名，彻底避免冲突)
 # ==========================================
 
 binary_sensor:
-  # --- 设备 1：卧室 ---
+  # --- Device 1: Bedroom ---
   - platform: template
     id: bedroom_led_state
-    name: "卧室灯 LED 状态 1"     # 【修改】加上 1
+    name: "Bedroom LED State 1"
     device_class: light
   - platform: template
     id: bedroom_fan_state
-    name: "卧室风扇 状态 1"       # 【修改】加上 1
+    name: "Bedroom Fan State 1"
     device_class: running
     
-  # --- 设备 2：客厅 ---
+  # --- Device 2: Livingroom ---
   - platform: template
     id: livingroom_led_state
-    name: "客厅灯 LED 状态 2"     # 【修改】加上 2
+    name: "Livingroom LED State 2"
     device_class: light
   - platform: template
     id: livingroom_fan_state
-    name: "客厅风扇 状态 2"       # 【修改】加上 2
+    name: "Livingroom Fan State 2"
     device_class: running
 
 sensor:
-  # --- 设备 1：卧室 ---
+  # --- Device 1: Bedroom ---
   - platform: template
     id: bedroom_brightness
-    name: "卧室灯 亮度 1"         # 【修改】加上 1
+    name: "Bedroom Brightness 1"
     unit_of_measurement: "%"
     accuracy_decimals: 0
   - platform: template
     id: bedroom_color_temp
-    name: "卧室灯 色温 1"         # 【修改】加上 1
+    name: "Bedroom Color Temp 1"
     unit_of_measurement: "K"
     accuracy_decimals: 0
   - platform: template
     id: bedroom_fan_speed
-    name: "卧室风扇 档位 1"       # 【修改】加上 1
+    name: "Bedroom Fan Speed 1"
     accuracy_decimals: 0
   - platform: template
     id: bedroom_timer
-    name: "卧室设备 定时 1"       # 【修改】加上 1
+    name: "Bedroom Timer 1"
     unit_of_measurement: "min"
     accuracy_decimals: 0
     
-  # --- 设备 2：客厅 ---
+  # --- Device 2: Livingroom ---
   - platform: template
     id: livingroom_brightness
-    name: "客厅灯 亮度 2"         # 【修改】加上 2
+    name: "Livingroom Brightness 2"
     unit_of_measurement: "%"
     accuracy_decimals: 0
   - platform: template
     id: livingroom_color_temp
-    name: "客厅灯 色温 2"         # 【修改】加上 2
+    name: "Livingroom Color Temp 2"
     unit_of_measurement: "K"
     accuracy_decimals: 0
   - platform: template
     id: livingroom_fan_speed
-    name: "客厅风扇 档位 2"       # 【修改】加上 2
+    name: "Livingroom Fan Speed 2"
     accuracy_decimals: 0
   - platform: template
     id: livingroom_timer
-    name: "客厅设备 定时 2"       # 【修改】加上 2
+    name: "Livingroom Timer 2"
     unit_of_measurement: "min"
     accuracy_decimals: 0
 
 text_sensor:
-  # --- 设备 1：卧室 ---
+  # --- Device 1: Bedroom ---
   - platform: template
     id: bedroom_fan_direction
-    name: "卧室风扇 方向 1"       # 【修改】加上 1
+    name: "Bedroom Fan Direction 1"
     
-  # --- 设备 2：客厅 ---
+  # --- Device 2: Livingroom ---
   - platform: template
     id: livingroom_fan_direction
-    name: "客厅风扇 方向 2"       # 【修改】加上 2
+    name: "Livingroom Fan Direction 2"
+
 # ==========================================
 # 2. 核心：BLE 广播监听与多设备状态路由
 # ==========================================
@@ -173,11 +174,11 @@ esp32_ble_tracker:
                 int fan_hex = strtol(he.substr(36, 2).c_str(), nullptr, 16);
                 int fan_speed = fan_on ? (fan_hex + 1) : 0;
                 
-                std::string fan_dir_str = fan_on ? (fan_reverse ? "反转" : "正转") : "关闭";
+                std::string fan_dir_str = fan_on ? (fan_reverse ? "Reverse" : "Forward") : "Off";
 
                 // === 根据 MAC 地址路由到对应的传感器实体 ===
                 
-                // 【设备 1：卧室】 (请替换为你的真实 MAC，全小写)
+                // 【Device 1: Bedroom】
                 if (mac == "00:00:70:38:ab:cd") {
                     id(bedroom_led_state).publish_state(led_on);
                     id(bedroom_brightness).publish_state(brightness_pct);
@@ -187,7 +188,7 @@ esp32_ble_tracker:
                     id(bedroom_fan_direction).publish_state(fan_dir_str);
                     id(bedroom_timer).publish_state(timer_min);
                 } 
-                // 【设备 2：客厅】 (请替换为你的真实 MAC，全小写)
+                // 【Device 2: Livingroom】
                 else if (mac == "00:00:70:27:80:48") {
                     id(livingroom_led_state).publish_state(led_on);
                     id(livingroom_brightness).publish_state(brightness_pct);
@@ -210,13 +211,13 @@ ble_gateway:
 light:
   - platform: ble_light
     id: bedroom_light
-    name: "卧室灯 (控制)"
+    name: "Bedroom Light Control"
     ble_device_id: "light.room1"
     gateway: ct1_ble
 
 fan:
   - platform: ble_fan
     id: bedroom_fan
-    name: "卧室风扇 (控制)"
+    name: "Bedroom Fan Control"
     ble_device_id: "fan.room1"
     gateway: ct1_ble
