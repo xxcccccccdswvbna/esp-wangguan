@@ -297,12 +297,27 @@ void BLEGateway::send_hex(
 
 
 
-                for(
-                    size_t i=0;
-                    i < action.packets.size();
-                    i++
-                )
-                {
+for(
+    size_t i=0;
+    i < action.packets.size();
+    i++
+)
+{
+
+    ESP_LOGI(
+        TAG,
+        "ACTION PACKET:%s",
+        action.packets[i].c_str()
+    );
+
+
+    if(i>0)
+        packets += "|";
+
+
+    packets += action.packets[i];
+
+}
 
                     if(i>0)
                     {
