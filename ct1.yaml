@@ -45,11 +45,9 @@ external_components:
       path: components
 
 # ==========================================
-# 1. 状态反馈：4 个设备分组传感器 (使用 D1/D2/D3/D4 前缀分组)
+# 1. 状态反馈：2 个设备分组传感器 (先保稳，只开 2 个设备)
 # ==========================================
-
 binary_sensor:
-  # --- Device 1 ---
   - platform: template
     id: d1_led_state
     name: "D1 - LED State"
@@ -58,7 +56,6 @@ binary_sensor:
     id: d1_fan_state
     name: "D1 - Fan State"
     device_class: running
-  # --- Device 2 ---
   - platform: template
     id: d2_led_state
     name: "D2 - LED State"
@@ -67,27 +64,8 @@ binary_sensor:
     id: d2_fan_state
     name: "D2 - Fan State"
     device_class: running
-  # --- Device 3 ---
-  - platform: template
-    id: d3_led_state
-    name: "D3 - LED State"
-    device_class: light
-  - platform: template
-    id: d3_fan_state
-    name: "D3 - Fan State"
-    device_class: running
-  # --- Device 4 ---
-  - platform: template
-    id: d4_led_state
-    name: "D4 - LED State"
-    device_class: light
-  - platform: template
-    id: d4_fan_state
-    name: "D4 - Fan State"
-    device_class: running
 
 sensor:
-  # --- Device 1 ---
   - platform: template
     id: d1_brightness
     name: "D1 - Brightness"
@@ -107,7 +85,6 @@ sensor:
     name: "D1 - Timer"
     unit_of_measurement: "min"
     accuracy_decimals: 0
-  # --- Device 2 ---
   - platform: template
     id: d2_brightness
     name: "D2 - Brightness"
@@ -127,64 +104,17 @@ sensor:
     name: "D2 - Timer"
     unit_of_measurement: "min"
     accuracy_decimals: 0
-  # --- Device 3 ---
-  - platform: template
-    id: d3_brightness
-    name: "D3 - Brightness"
-    unit_of_measurement: "%"
-    accuracy_decimals: 0
-  - platform: template
-    id: d3_color_temp
-    name: "D3 - Color Temp"
-    unit_of_measurement: "K"
-    accuracy_decimals: 0
-  - platform: template
-    id: d3_fan_speed
-    name: "D3 - Fan Speed"
-    accuracy_decimals: 0
-  - platform: template
-    id: d3_timer
-    name: "D3 - Timer"
-    unit_of_measurement: "min"
-    accuracy_decimals: 0
-  # --- Device 4 ---
-  - platform: template
-    id: d4_brightness
-    name: "D4 - Brightness"
-    unit_of_measurement: "%"
-    accuracy_decimals: 0
-  - platform: template
-    id: d4_color_temp
-    name: "D4 - Color Temp"
-    unit_of_measurement: "K"
-    accuracy_decimals: 0
-  - platform: template
-    id: d4_fan_speed
-    name: "D4 - Fan Speed"
-    accuracy_decimals: 0
-  - platform: template
-    id: d4_timer
-    name: "D4 - Timer"
-    unit_of_measurement: "min"
-    accuracy_decimals: 0
 
 text_sensor:
-  # --- Device 1 to 4 ---
   - platform: template
     id: d1_fan_direction
     name: "D1 - Fan Direction"
   - platform: template
     id: d2_fan_direction
     name: "D2 - Fan Direction"
-  - platform: template
-    id: d3_fan_direction
-    name: "D3 - Fan Direction"
-  - platform: template
-    id: d4_fan_direction
-    name: "D4 - Fan Direction"
 
 # ==========================================
-# 2. 核心：BLE 广播监听与 4 设备状态路由
+# 2. 核心：极致优化的 BLE 广播监听 (零内存分配)
 # ==========================================
 esp32_ble_tracker:
   scan_parameters:
@@ -196,42 +126,36 @@ esp32_ble_tracker:
         - lambda: |-
             auto datas = x.get_manufacturer_datas();
             for (auto &data : datas) {
-                std::string he = "";
-                for (uint8_t b : data.data) {
-                    char buf[3];
-                    sprintf(buf, "%02x", b);
-                    he += buf;
-                }
-                
-                if (he.length() < 40) continue; 
-                if (he.substr(0, 4) != "8153") continue;
+                auto &raw = data.data;
+                // 1. 校验长度 (至少 20 字节) 和 协议头 (0x81, 0x53)
+                if (raw.size() < 20) continue; 
+                if (raw[0] != 0x81 || raw[1] != 0x53) continue;
 
-                // 提取并反转 MAC 地址 (位置 6:18)
-                std::string mac_raw = he.substr(6, 12);
-                std::string mac = "";
-                for (int i = 10; i >= 0; i -= 2) {
-                    mac += mac_raw.substr(i, 2);
-                    if (i > 0) mac += ":";
-                }
-
-                // 解析通用状态数据
-                int mode = strtol(he.substr(22, 2).c_str(), nullptr, 16);
+                // 2. 【核心优化】直接通过字节索引读取，零字符串转换，零 strtol！
+                uint8_t mode = raw[11];
                 bool led_on = (mode & 0x01) != 0;
                 bool fan_on = !(mode == 0x10 || mode == 0x11);
                 bool fan_reverse = (mode & 0x20) != 0;
                 
-                float brightness_pct = (strtol(he.substr(28, 2).c_str(), nullptr, 16) / 255.0f) * 100.0f;
-                float color_pct = strtol(he.substr(30, 2).c_str(), nullptr, 16) / 255.0f;
-                float color_kelvin = 2700.0f + (6500.0f - 2700.0f) * color_pct;
+                float brightness_pct = (raw[14] / 255.0f) * 100.0f;
+                float color_kelvin = 2700.0f + (6500.0f - 2700.0f) * (raw[15] / 255.0f);
+                int timer_min = (raw[16] << 8) | raw[17];
+                int fan_speed = fan_on ? (raw[18] + 1) : 0;
                 
-                int timer_min = strtol(he.substr(32, 4).c_str(), nullptr, 16);
-                int fan_speed = fan_on ? (strtol(he.substr(36, 2).c_str(), nullptr, 16) + 1) : 0;
                 std::string fan_dir_str = fan_on ? (fan_reverse ? "Reverse" : "Forward") : "Off";
 
-                // === 根据 MAC 地址路由到对应的 4 个设备 ===
+                // 3. MAC 地址比较 (使用 memcmp 直接比较字节，绝不生成 MAC 字符串)
+                // 注意：广播中的 MAC 是逆序的 (raw[3] 到 raw[8])
+                // 00:00:70:27:80:48 -> 逆序字节: 48 80 27 70 00 00
+                uint8_t mac1[6] = {0x48, 0x80, 0x27, 0x70, 0x00, 0x00}; 
+                // 00:00:70:35:26:92 -> 逆序字节: 92 26 35 70 00 00
+                uint8_t mac2[6] = {0x92, 0x26, 0x35, 0x70, 0x00, 0x00}; 
                 
-                // 【Device 1】
-                if (mac == "00:00:70:27:80:48") {
+                // 提取当前广播的 MAC 字节 (逆序)
+                uint8_t current_mac[6] = {raw[8], raw[7], raw[6], raw[5], raw[4], raw[3]};
+
+                // 4. 路由到对应设备
+                if (memcmp(current_mac, mac1, 6) == 0) {
                     id(d1_led_state).publish_state(led_on);
                     id(d1_brightness).publish_state(brightness_pct);
                     id(d1_color_temp).publish_state(color_kelvin);
@@ -240,8 +164,7 @@ esp32_ble_tracker:
                     id(d1_fan_direction).publish_state(fan_dir_str);
                     id(d1_timer).publish_state(timer_min);
                 } 
-                // 【Device 2】
-                else if (mac == "00:00:70:35:26:92") {
+                else if (memcmp(current_mac, mac2, 6) == 0) {
                     id(d2_led_state).publish_state(led_on);
                     id(d2_brightness).publish_state(brightness_pct);
                     id(d2_color_temp).publish_state(color_kelvin);
@@ -249,33 +172,11 @@ esp32_ble_tracker:
                     id(d2_fan_speed).publish_state(fan_speed);
                     id(d2_fan_direction).publish_state(fan_dir_str);
                     id(d2_timer).publish_state(timer_min);
-                } 
-                // 【Device 3】
-                else if (mac == "00:00:70:38:ab:cd") {
-                    id(d3_led_state).publish_state(led_on);
-                    id(d3_brightness).publish_state(brightness_pct);
-                    id(d3_color_temp).publish_state(color_kelvin);
-                    id(d3_fan_state).publish_state(fan_on);
-                    id(d3_fan_speed).publish_state(fan_speed);
-                    id(d3_fan_direction).publish_state(fan_dir_str);
-                    id(d3_timer).publish_state(timer_min);
-                } 
-                // 【Device 4】 ⚠️ 注意：你提供的第4个MAC与第2个重复，此处使用占位符，请替换为真实MAC！
-                else if (mac == "00:00:70:35:26:94") { 
-                    id(d4_led_state).publish_state(led_on);
-                    id(d4_brightness).publish_state(brightness_pct);
-                    id(d4_color_temp).publish_state(color_kelvin);
-                    id(d4_fan_state).publish_state(fan_on);
-                    id(d4_fan_speed).publish_state(fan_speed);
-                    id(d4_fan_direction).publish_state(fan_dir_str);
-                    id(d4_timer).publish_state(timer_min);
                 }
-                
-                break; 
             }
 
 # ==========================================
-# 3. 控制链路：BLE 网关与实体
+# 3. 控制链路
 # ==========================================
 ble_gateway:
   id: ct1_ble
