@@ -3,32 +3,27 @@
 #include <string>
 
 #include "config_manager.h"
-#include "ble_gateway.h"
 
 
 namespace esphome {
 namespace ble_gateway {
 
 
-class CommandRouter {
+class BLEGateway;
 
+
+class CommandRouter
+{
 
 public:
 
     void set_gateway(
         BLEGateway *gateway
-    )
-    {
-        gateway_ = gateway;
-    }
-
+    );
 
     void set_config(
         ConfigManager *config
-    )
-    {
-        config_ = config;
-    }
+    );
 
 
     bool send_command(
@@ -37,12 +32,11 @@ public:
     );
 
 
-protected:
+private:
 
     BLEGateway *gateway_{nullptr};
 
     ConfigManager *config_{nullptr};
-
 
 };
 
