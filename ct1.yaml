@@ -2,104 +2,233 @@ esphome:
   name: ct1
   friendly_name: CT1 BLE Gateway
 
-
 esp32:
   board: esp32dev
   flash_size: 4MB
-
   framework:
     type: esp-idf
-
     sdkconfig_options:
       CONFIG_FREERTOS_UNICORE: y
-
       CONFIG_BT_ENABLED: y
       CONFIG_BT_BLE_ENABLED: y
-
-
 
 logger:
   baud_rate: 0
 
-
-
 wifi:
-
   ssid: "CC"
   password: "chen1122"
-
   fast_connect: true
-
   power_save_mode: none
-
-
   ap:
     ssid: "CT1 Fallback"
     password: "12345678"
 
-
-
 captive_portal:
-
-
 web_server:
-
-
 api:
   reboot_timeout: 0s
-
-
-
 ota:
   - platform: esphome
 
-
-
-
 mqtt:
-
   broker: "192.168.6.88"
-
-
   on_message:
-
     - topic: "ct1/ble/send"
-
       then:
-
         - lambda: |-
-
             id(ct1_ble).send_hex(x);
-
-
-
-
 
 external_components:
   - source:
       type: local
       path: components
 
+# ==========================================
+# 1. 状态反馈：多设备传感器实体 (只读，用于 HA 显示)
+# ==========================================
 
+# --- 设备 1：卧室风扇灯 ---
+binary_sensor:
+  - platform: template
+    id: bedroom_led_state
+    name: "卧室灯 LED 状态"
+    device_class: light
+  - platform: template
+    id: bedroom_fan_state
+    name: "卧室风扇 状态"
+    device_class: running
+
+sensor:
+  - platform: template
+    id: bedroom_brightness
+    name: "卧室灯 亮度"
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+  - platform: template
+    id: bedroom_color_temp
+    name: "卧室灯 色温"
+    unit_of_measurement: "K"
+    accuracy_decimals: 0
+  - platform: template
+    id: bedroom_fan_speed
+    name: "卧室风扇 档位"
+    accuracy_decimals: 0
+  - platform: template
+    id: bedroom_timer
+    name: "卧室设备 定时"
+    unit_of_measurement: "min"
+    accuracy_decimals: 0
+
+text_sensor:
+  - platform: template
+    id: bedroom_fan_direction
+    name: "卧室风扇 方向"
+
+# --- 设备 2：客厅风扇灯 (复制上面的结构，改个前缀即可) ---
+binary_sensor:
+  - platform: template
+    id: livingroom_led_state
+    name: "客厅灯 LED 状态"
+    device_class: light
+  - platform: template
+    id: livingroom_fan_state
+    name: "客厅风扇 状态"
+    device_class: running
+
+sensor:
+  - platform: template
+    id: livingroom_brightness
+    name: "客厅灯 亮度"
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+  - platform: template
+    id: livingroom_color_temp
+    name: "客厅灯 色温"
+    unit_of_measurement: "K"
+    accuracy_decimals: 0
+  - platform: template
+    id: livingroom_fan_speed
+    name: "客厅风扇 档位"
+    accuracy_decimals: 0
+  - platform: template
+    id: livingroom_timer
+    name: "客厅设备 定时"
+    unit_of_measurement: "min"
+    accuracy_decimals: 0
+
+text_sensor:
+  - platform: template
+    id: livingroom_fan_direction
+    name: "客厅风扇 方向"
+
+
+# ==========================================
+# 2. 核心：BLE 广播监听与多设备状态路由
+# ==========================================
 esp32_ble_tracker:
   scan_parameters:
     interval: 320ms
     window: 30ms
     active: false
+  on_ble_advertise:
+    - then:
+        - lambda: |-
+            auto datas = x.get_manufacturer_datas();
+            for (auto &data : datas) {
+                // 1. 将字节数组转换为小写 hex 字符串
+                std::string he = "";
+                for (uint8_t b : data.data) {
+                    char buf[3];
+                    sprintf(buf, "%02x", b);
+                    he += buf;
+                }
+                
+                // 2. 校验数据长度和协议头 (8153)
+                if (he.length() < 40) continue; 
+                if (he.substr(0, 4) != "8153") continue;
 
+                // 3. 【核心】从广播数据中提取并反转 MAC 地址 (位置 6:18)
+                std::string mac_raw = he.substr(6, 12);
+                std::string mac = "";
+                for (int i = 10; i >= 0; i -= 2) {
+                    mac += mac_raw.substr(i, 2);
+                    if (i > 0) mac += ":";
+                }
 
+                // === 开始解析通用状态数据 ===
+                int mode = strtol(he.substr(22, 2).c_str(), nullptr, 16);
+                bool led_on = (mode & 0x01) != 0;
+                bool fan_on = !(mode == 0x10 || mode == 0x11);
+                bool fan_reverse = (mode & 0x20) != 0;
+                
+                int bright_hex = strtol(he.substr(28, 2).c_str(), nullptr, 16);
+                float brightness_pct = (bright_hex / 255.0f) * 100.0f;
+                
+                int color_hex = strtol(he.substr(30, 2).c_str(), nullptr, 16);
+                float color_pct = color_hex / 255.0f;
+                float color_kelvin = 2700.0f + (6500.0f - 2700.0f) * color_pct;
+                
+                int timer_min = strtol(he.substr(32, 4).c_str(), nullptr, 16);
+                
+                int fan_hex = strtol(he.substr(36, 2).c_str(), nullptr, 16);
+                int fan_speed = fan_on ? (fan_hex + 1) : 0;
+                
+                std::string fan_dir_str = fan_on ? (fan_reverse ? "反转" : "正转") : "关闭";
+
+                // === 根据 MAC 地址路由到对应的传感器实体 ===
+                
+                // 【设备 1：卧室】 (请替换为你的真实 MAC)
+                if (mac == "00:00:70:38:ab:cd") {
+                    id(bedroom_led_state).publish_state(led_on);
+                    id(bedroom_brightness).publish_state(brightness_pct);
+                    id(bedroom_color_temp).publish_state(color_kelvin);
+                    id(bedroom_fan_state).publish_state(fan_on);
+                    id(bedroom_fan_speed).publish_state(fan_speed);
+                    id(bedroom_fan_direction).publish_state(fan_dir_str);
+                    id(bedroom_timer).publish_state(timer_min);
+                } 
+                // 【设备 2：客厅】 (请替换为你的真实 MAC)
+                else if (mac == "00:00:70:27:80:48") {
+                    id(livingroom_led_state).publish_state(led_on);
+                    id(livingroom_brightness).publish_state(brightness_pct);
+                    id(livingroom_color_temp).publish_state(color_kelvin);
+                    id(livingroom_fan_state).publish_state(fan_on);
+                    id(livingroom_fan_speed).publish_state(fan_speed);
+                    id(livingroom_fan_direction).publish_state(fan_dir_str);
+                    id(livingroom_timer).publish_state(timer_min);
+                }
+                
+                break; // 找到第一个匹配的 manufacturer data 就退出循环
+            }
+
+# ==========================================
+# 3. 控制链路：BLE 网关
+# ==========================================
 ble_gateway:
   id: ct1_ble
+
+# ==========================================
+# 4. 下行控制实体 (如果需要控制多个设备，在此处添加)
+# ==========================================
+# 示例：如果你要控制卧室灯
+# light:
+#   - platform: ble_light
+#     id: bedroom_light_ctrl
+#     name: "卧室灯 (控制)"
+#     ble_device_id: "light.room1"
+#     gateway: ct1_ble
+
 light:
   - platform: ble_light
-    id: my_bedroom_light
-    name: "卧室灯"
+    id: bedroom_light
+    name: "卧室灯 (控制)"
     ble_device_id: "light.room1"
     gateway: ct1_ble
 
 fan:
   - platform: ble_fan
-    id: my_bedroom_fan
-    name: "卧室风扇"
+    id: bedroom_fan
+    name: "卧室风扇 (控制)"
     ble_device_id: "fan.room1"
     gateway: ct1_ble
