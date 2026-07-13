@@ -23,14 +23,17 @@ void ConfigManager::load()
     devices_.clear();
 
 
-    DeviceTable::load(
+    DeviceTable table;
+
+
+    table.load(
         devices_
     );
 
 
     ESP_LOGI(
         TAG,
-        "devices loaded:%d",
+        "Loaded devices: %d",
         devices_.size()
     );
 
