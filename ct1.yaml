@@ -45,70 +45,70 @@ external_components:
       path: components
 
 # ==========================================
-# 1. 状态反馈：多设备传感器实体 (已移除无效的 object_id，依靠唯一的 id 避免冲突)
+# 1. 状态反馈：多设备传感器实体 (通过在 name 中加入数字解决中文转 ASCII 冲突)
 # ==========================================
 
 binary_sensor:
   # --- 设备 1：卧室 ---
   - platform: template
     id: bedroom_led_state
-    name: "卧室灯 LED 状态"
+    name: "卧室灯 LED 状态 1"     # 【修改】加上 1
     device_class: light
   - platform: template
     id: bedroom_fan_state
-    name: "卧室风扇 状态"
+    name: "卧室风扇 状态 1"       # 【修改】加上 1
     device_class: running
     
   # --- 设备 2：客厅 ---
   - platform: template
     id: livingroom_led_state
-    name: "客厅灯 LED 状态"
+    name: "客厅灯 LED 状态 2"     # 【修改】加上 2
     device_class: light
   - platform: template
     id: livingroom_fan_state
-    name: "客厅风扇 状态"
+    name: "客厅风扇 状态 2"       # 【修改】加上 2
     device_class: running
 
 sensor:
   # --- 设备 1：卧室 ---
   - platform: template
     id: bedroom_brightness
-    name: "卧室灯 亮度"
+    name: "卧室灯 亮度 1"         # 【修改】加上 1
     unit_of_measurement: "%"
     accuracy_decimals: 0
   - platform: template
     id: bedroom_color_temp
-    name: "卧室灯 色温"
+    name: "卧室灯 色温 1"         # 【修改】加上 1
     unit_of_measurement: "K"
     accuracy_decimals: 0
   - platform: template
     id: bedroom_fan_speed
-    name: "卧室风扇 档位"
+    name: "卧室风扇 档位 1"       # 【修改】加上 1
     accuracy_decimals: 0
   - platform: template
     id: bedroom_timer
-    name: "卧室设备 定时"
+    name: "卧室设备 定时 1"       # 【修改】加上 1
     unit_of_measurement: "min"
     accuracy_decimals: 0
     
   # --- 设备 2：客厅 ---
   - platform: template
     id: livingroom_brightness
-    name: "客厅灯 亮度"
+    name: "客厅灯 亮度 2"         # 【修改】加上 2
     unit_of_measurement: "%"
     accuracy_decimals: 0
   - platform: template
     id: livingroom_color_temp
-    name: "客厅灯 色温"
+    name: "客厅灯 色温 2"         # 【修改】加上 2
     unit_of_measurement: "K"
     accuracy_decimals: 0
   - platform: template
     id: livingroom_fan_speed
-    name: "客厅风扇 档位"
+    name: "客厅风扇 档位 2"       # 【修改】加上 2
     accuracy_decimals: 0
   - platform: template
     id: livingroom_timer
-    name: "客厅设备 定时"
+    name: "客厅设备 定时 2"       # 【修改】加上 2
     unit_of_measurement: "min"
     accuracy_decimals: 0
 
@@ -116,13 +116,12 @@ text_sensor:
   # --- 设备 1：卧室 ---
   - platform: template
     id: bedroom_fan_direction
-    name: "卧室风扇 方向"
+    name: "卧室风扇 方向 1"       # 【修改】加上 1
     
   # --- 设备 2：客厅 ---
   - platform: template
     id: livingroom_fan_direction
-    name: "客厅风扇 方向"
-
+    name: "客厅风扇 方向 2"       # 【修改】加上 2
 # ==========================================
 # 2. 核心：BLE 广播监听与多设备状态路由
 # ==========================================
