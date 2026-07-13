@@ -1,4 +1,4 @@
-import json 
+import json
 import os
 import glob
 
@@ -7,7 +7,6 @@ def clean_hex(hex_str):
     return hex_str.upper()
 
 def get_english_name(dev_id):
-    """根据 id (如 device.room1) 生成纯英文基础名 (如 Room1)，防止 HA 中文转码冲突"""
     raw_name = dev_id.split('.')[-1]
     return raw_name.replace('_', ' ').title()
 
@@ -54,11 +53,8 @@ void DeviceTable::load(std::vector<BLEDevice> &devices) {
         safe_id = dev['id'].replace('.', '_')
         en_name = get_english_name(dev['id'])
         
-        # ==========================================
-        # 【规则 A】：有 MAC -> 只负责生成 状态传感器 和 监听路由
-        # ==========================================
+        # 【规则 A】：有 MAC -> 生成状态传感器和监听路由
         if 'mac' in dev and dev['mac']:
-            # 1. 生成状态传感器
             binary_sensors.append(f"  - platform: template\n    id: {safe_id}_led_state\n    name: \"{en_name} LED\"\n    device_class: light")
             binary_sensors.append(f"  - platform: template\n    id: {safe_id}_fan_state\n    name: \"{en_name} Fan State\"\n    device_class: running")
             
@@ -69,7 +65,6 @@ void DeviceTable::load(std::vector<BLEDevice> &devices) {
             
             text_sensors.append(f"  - platform: template\n    id: {safe_id}_fan_direction\n    name: \"{en_name} Fan Direction\"")
             
-            # 2. 生成 BLE 监听路由 (Tracker)
             mac_bytes = dev['mac'].split(':')
             mac_array = "{" + ", ".join([f"0x{b}" for b in reversed(mac_bytes)]) + "}"
             route_code = f"""
@@ -85,14 +80,10 @@ void DeviceTable::load(std::vector<BLEDevice> &devices) {
                 }}"""
             tracker_routes.append(route_code)
 
-        # ==========================================
-        # 【规则 B】：有 light 节点(发射数据) -> 只负责生成 灯控制实体 和 C++指令
-        # ==========================================
+        # 【规则 B】：有 light 节点 -> 生成灯控制实体和 C++指令
         if 'light' in dev:
             light_id = dev['light']['id']
-            # 生成 YAML 控制实体
             lights_yaml.append(f"  - platform: ble_light\n    id: {safe_id}_light_ctrl\n    name: \"{en_name} Light\"\n    ble_device_id: \"{light_id}\"\n    gateway: ct1_ble")
-            # 生成 C++ 底层指令
             cpp_code += f"\n    add_device(devices, \"{light_id}\", \"light\", \"{en_name} Light\");\n"
             for action, packets in dev['light'].get('actions', {}).items():
                 packets_clean = [clean_hex(p) for p in packets if str(p).strip()]
@@ -100,14 +91,10 @@ void DeviceTable::load(std::vector<BLEDevice> &devices) {
                     packets_str = ",\n        ".join([f'"{p}"' for p in packets_clean])
                     cpp_code += f"    add_action(devices, \"{light_id}\", \"{action}\", {{\n        {packets_str}\n    }});\n"
 
-        # ==========================================
-        # 【规则 C】：有 fan 节点(发射数据) -> 只负责生成 风扇控制实体 和 C++指令
-        # ==========================================
+        # 【规则 C】：有 fan 节点 -> 生成风扇控制实体和 C++指令
         if 'fan' in dev:
             fan_id = dev['fan']['id']
-            # 生成 YAML 控制实体
             fans_yaml.append(f"  - platform: ble_fan\n    id: {safe_id}_fan_ctrl\n    name: \"{en_name} Fan\"\n    ble_device_id: \"{fan_id}\"\n    gateway: ct1_ble")
-            # 生成 C++ 底层指令
             cpp_code += f"\n    add_device(devices, \"{fan_id}\", \"fan\", \"{en_name} Fan\");\n"
             for action, packets in dev['fan'].get('actions', {}).items():
                 packets_clean = [clean_hex(p) for p in packets if str(p).strip()]
@@ -115,7 +102,6 @@ void DeviceTable::load(std::vector<BLEDevice> &devices) {
                     packets_str = ",\n        ".join([f'"{p}"' for p in packets_clean])
                     cpp_code += f"    add_action(devices, \"{fan_id}\", \"{action}\", {{\n        {packets_str}\n    }});\n"
 
-    # 闭合 C++ 代码
     cpp_code += """
 }
 void DeviceTable::add_device(std::vector<BLEDevice> &devices, std::string id, std::string type, std::string name) {
@@ -133,7 +119,7 @@ void DeviceTable::add_action(std::vector<BLEDevice> &devices, std::string device
 """
 
     # ==========================================
-    # 组装完整的 ct1.yaml
+    # 组装完整的 ct1.yaml (加入 HTTP, MQTT, 蓝牙代理)
     # ==========================================
     yaml_content = """esphome:
   name: ct1
@@ -161,11 +147,29 @@ wifi:
     ssid: "CT1 Fallback"
     password: "12345678"
 
+# 【1. 开启 HTTP 网页服务】用于本地 OTA 升级和查看状态
+web_server:
+  port: 80
+  version: 2
+
+# 【2. 开启 MQTT】请修改 broker 为你的 HA 或 MQTT 服务器 IP
+mqtt:
+  broker: "192.168.6.88"
+  # username: "your_mqtt_user"
+  # password: "your_mqtt_pass"
+  discovery: true
+
+# 【3. 开启 HA 原生 API】
 api:
   reboot_timeout: 0s
 
 ota:
   - platform: esphome
+    # password: "your_ota_password" # 建议取消注释并设置密码
+
+# 【4. 开启蓝牙代理】让 ESP32 帮 HA 接收其他蓝牙设备（如温湿度计）的数据
+bluetooth_proxy:
+  active: false # 设为 false 仅被动转发广播，极度节省资源。如需连接蓝牙设备改为 true
 
 external_components:
   - source:
@@ -227,7 +231,7 @@ ble_gateway:
         f.write(yaml_content)
 
     print(f"🎉 Successfully generated: {cpp_path}")
-    print(f"🎉 Successfully generated: {yaml_path} (Strictly decoupled logic)")
+    print(f"🎉 Successfully generated: {yaml_path} (With Web, MQTT, BT Proxy)")
 
 if __name__ == "__main__":
     base_dir = os.path.dirname(os.path.abspath(__file__))
