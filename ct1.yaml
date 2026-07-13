@@ -26,6 +26,7 @@ wifi:
 
 api:
   reboot_timeout: 0s
+
 ota:
   - platform: esphome
 
@@ -34,15 +35,94 @@ external_components:
       type: local
       path: components
 
-# ==========================================
-# 👇 核心修复：使用 packages 机制引入自动生成的配置
-# ==========================================
-packages:
-  tracker_config: !include auto_tracker.yaml
-  entities_config: !include auto_entities.yaml
-
-# ==========================================
-# 网关实例
-# ==========================================
 ble_gateway:
   id: ct1_ble
+
+binary_sensor:
+  - platform: template
+    id: device_diningroom_led_state
+    name: "Diningroom LED"
+    device_class: light
+  - platform: template
+    id: device_diningroom_fan_state
+    name: "Diningroom Fan State"
+    device_class: running
+
+sensor:
+  - platform: template
+    id: device_diningroom_brightness
+    name: "Diningroom Brightness"
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+  - platform: template
+    id: device_diningroom_color_temp
+    name: "Diningroom Color Temp"
+    unit_of_measurement: "K"
+    accuracy_decimals: 0
+  - platform: template
+    id: device_diningroom_fan_speed
+    name: "Diningroom Fan Speed"
+    accuracy_decimals: 0
+  - platform: template
+    id: device_diningroom_timer
+    name: "Diningroom Timer"
+    unit_of_measurement: "min"
+    accuracy_decimals: 0
+
+text_sensor:
+  - platform: template
+    id: device_diningroom_fan_direction
+    name: "Diningroom Fan Direction"
+
+light:
+  - platform: ble_light
+    id: device_diningroom_light_ctrl
+    name: "Diningroom Light"
+    ble_device_id: "light.diningroom"
+    gateway: ct1_ble
+
+fan:
+  - platform: ble_fan
+    id: device_diningroom_fan_ctrl
+    name: "Diningroom Fan"
+    ble_device_id: "fan.diningroom"
+    gateway: ct1_ble
+
+esp32_ble_tracker:
+  scan_parameters:
+    interval: 320ms
+    window: 30ms
+    active: false
+  on_ble_advertise:
+    - then:
+        - lambda: |-
+            auto datas = x.get_manufacturer_datas();
+            for (auto &data : datas) {
+                auto &raw = data.data;
+                if (raw.size() < 20) continue; 
+                if (raw[0] != 0x81 || raw[1] != 0x53) continue;
+
+                uint8_t mode = raw[11];
+                bool led_on = (mode & 0x01) != 0;
+                bool fan_on = !(mode == 0x10 || mode == 0x11);
+                bool fan_reverse = (mode & 0x20) != 0;
+                
+                float brightness_pct = (raw[14] / 255.0f) * 100.0f;
+                float color_kelvin = 2700.0f + (6500.0f - 2700.0f) * (raw[15] / 255.0f);
+                int timer_min = (raw[16] << 8) | raw[17];
+                int fan_speed = fan_on ? (raw[18] + 1) : 0;
+                std::string fan_dir_str = fan_on ? (fan_reverse ? "Reverse" : "Forward") : "Off";
+
+                uint8_t current_mac[6] = {raw[8], raw[7], raw[6], raw[5], raw[4], raw[3]};
+
+                uint8_t mac_target_device_diningroom[6] = {0x77, 0x88, 0x99, 0x70, 0x00, 0x00};
+                if (memcmp(current_mac, mac_target_device_diningroom, 6) == 0) {
+                    id(device_diningroom_led_state).publish_state(led_on);
+                    id(device_diningroom_brightness).publish_state(brightness_pct);
+                    id(device_diningroom_color_temp).publish_state(color_kelvin);
+                    id(device_diningroom_fan_state).publish_state(fan_on);
+                    id(device_diningroom_fan_speed).publish_state(fan_speed);
+                    id(device_diningroom_fan_direction).publish_state(fan_dir_str);
+                    id(device_diningroom_timer).publish_state(timer_min);
+                }
+            }
