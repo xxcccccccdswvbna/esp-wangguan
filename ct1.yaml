@@ -90,14 +90,10 @@ esp32_ble_tracker:
 
 ble_gateway:
   id: ct1_ble
-# ==========================================
-# 阶段一：添加自定义 BLE 灯实体
-# ==========================================
 light:
   - platform: ble_light
+    id: my_bedroom_light      # <--- 【新增】显式指定一个唯一的 ID
     name: "卧室灯"
-    # 【修改】这里必须和 light.py 中的 CONF_BLE_DEVICE_ID 保持一致
     ble_device_id: "light.room1"
-    # 关联到上面定义的 ble_gateway 实例
     gateway: ct1_ble
   
