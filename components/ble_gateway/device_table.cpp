@@ -43,16 +43,14 @@ void DeviceTable::load(
     );
 
 
-
-    light.actions["on"]
-        =
-        on;
+    light.actions["on"] = on;
 
 
 
     devices.push_back(
         light
     );
+
 
 }
 
