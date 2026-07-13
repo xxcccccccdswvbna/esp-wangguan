@@ -7,6 +7,8 @@ DEPENDENCIES = ["ble_gateway"]
 
 ble_fan_ns = cg.esphome_ns.namespace("ble_fan")
 ble_gateway_ns = cg.esphome_ns.namespace("ble_gateway")
+# 【标准写法】使用 esphome_ns 获取 fan 命名空间
+fan_ns = cg.esphome_ns.namespace("fan")
 
 BLEFan = ble_fan_ns.class_("BLEFan", cg.Component, fan.Fan)
 BLEGateway = ble_gateway_ns.class_("BLEGateway", cg.Component)
@@ -14,9 +16,9 @@ BLEGateway = ble_gateway_ns.class_("BLEGateway", cg.Component)
 CONF_BLE_DEVICE_ID = "ble_device_id"
 CONF_GATEWAY = "gateway"
 
-# 【终极修正】使用 global_ns 强制指定完整的 C++ 命名空间路径，杜绝任何 Python 变量名污染
-# 这行代码明确告诉生成器：我要 C++ 里的 ::esphome::fan::FanRestoreMode 枚举
-FanRestoreMode = cg.global_ns.namespace("esphome").namespace("fan").enum("FanRestoreMode")
+# 【核心修正】通过 .enum() 精准定位到 FanRestoreMode 枚举类
+# 这会告诉代码生成器：这是一个枚举类，生成 C++ 时必须带上 FanRestoreMode:: 前缀
+FanRestoreMode = fan_ns.enum("FanRestoreMode")
 
 RESTORE_MODES = {
     "NO_RESTORE": FanRestoreMode.NO_RESTORE,
