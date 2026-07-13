@@ -9,15 +9,12 @@ ble_fan_ns = cg.esphome_ns.namespace("ble_fan")
 ble_gateway_ns = cg.esphome_ns.namespace("ble_gateway")
 fan_ns = cg.esphome_ns.namespace("fan")
 
-BLEFan = ble_fan_ns.class_("BLEFan", cg.Component, fan.Fan)
+BLEFan = ble_fan_ns.class_("BLEFan", fan.Fan) # 【修正】移除 cg.Component
 BLEGateway = ble_gateway_ns.class_("BLEGateway", cg.Component)
 
 CONF_BLE_DEVICE_ID = "ble_device_id"
 CONF_GATEWAY = "gateway"
 
-# 【终极修正】将 FanRestoreMode 声明为 namespace (命名空间)
-# 这样代码生成器在访问其内部的枚举值时，会强制使用 C++ 的 :: 作用域解析符
-# 从而完美生成 fan::FanRestoreMode::RESTORE_DEFAULT_OFF
 FanRestoreMode = fan_ns.namespace("FanRestoreMode")
 
 RESTORE_MODES = {
@@ -41,7 +38,9 @@ CONFIG_SCHEMA = cv.Schema({
 async def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID])
     
-    await cg.register_component(var, config)
+    # 【修正】移除这一行！不再注册为 Component，只注册为 Fan
+    # await cg.register_component(var, config)
+    
     await fan.register_fan(var, config)
 
     gateway_var = await cg.get_variable(config[CONF_GATEWAY])
