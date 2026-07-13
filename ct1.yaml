@@ -45,86 +45,146 @@ external_components:
       path: components
 
 # ==========================================
-# 1. 状态反馈：多设备传感器实体 (全英文命名，彻底避免冲突)
+# 1. 状态反馈：4 个设备分组传感器 (使用 D1/D2/D3/D4 前缀分组)
 # ==========================================
 
 binary_sensor:
-  # --- Device 1: Bedroom ---
+  # --- Device 1 ---
   - platform: template
-    id: bedroom_led_state
-    name: "Bedroom LED State 1"
+    id: d1_led_state
+    name: "D1 - LED State"
     device_class: light
   - platform: template
-    id: bedroom_fan_state
-    name: "Bedroom Fan State 1"
+    id: d1_fan_state
+    name: "D1 - Fan State"
     device_class: running
-    
-  # --- Device 2: Livingroom ---
+  # --- Device 2 ---
   - platform: template
-    id: livingroom_led_state
-    name: "Livingroom LED State 2"
+    id: d2_led_state
+    name: "D2 - LED State"
     device_class: light
   - platform: template
-    id: livingroom_fan_state
-    name: "Livingroom Fan State 2"
+    id: d2_fan_state
+    name: "D2 - Fan State"
+    device_class: running
+  # --- Device 3 ---
+  - platform: template
+    id: d3_led_state
+    name: "D3 - LED State"
+    device_class: light
+  - platform: template
+    id: d3_fan_state
+    name: "D3 - Fan State"
+    device_class: running
+  # --- Device 4 ---
+  - platform: template
+    id: d4_led_state
+    name: "D4 - LED State"
+    device_class: light
+  - platform: template
+    id: d4_fan_state
+    name: "D4 - Fan State"
     device_class: running
 
 sensor:
-  # --- Device 1: Bedroom ---
+  # --- Device 1 ---
   - platform: template
-    id: bedroom_brightness
-    name: "Bedroom Brightness 1"
+    id: d1_brightness
+    name: "D1 - Brightness"
     unit_of_measurement: "%"
     accuracy_decimals: 0
   - platform: template
-    id: bedroom_color_temp
-    name: "Bedroom Color Temp 1"
+    id: d1_color_temp
+    name: "D1 - Color Temp"
     unit_of_measurement: "K"
     accuracy_decimals: 0
   - platform: template
-    id: bedroom_fan_speed
-    name: "Bedroom Fan Speed 1"
+    id: d1_fan_speed
+    name: "D1 - Fan Speed"
     accuracy_decimals: 0
   - platform: template
-    id: bedroom_timer
-    name: "Bedroom Timer 1"
+    id: d1_timer
+    name: "D1 - Timer"
     unit_of_measurement: "min"
     accuracy_decimals: 0
-    
-  # --- Device 2: Livingroom ---
+  # --- Device 2 ---
   - platform: template
-    id: livingroom_brightness
-    name: "Livingroom Brightness 2"
+    id: d2_brightness
+    name: "D2 - Brightness"
     unit_of_measurement: "%"
     accuracy_decimals: 0
   - platform: template
-    id: livingroom_color_temp
-    name: "Livingroom Color Temp 2"
+    id: d2_color_temp
+    name: "D2 - Color Temp"
     unit_of_measurement: "K"
     accuracy_decimals: 0
   - platform: template
-    id: livingroom_fan_speed
-    name: "Livingroom Fan Speed 2"
+    id: d2_fan_speed
+    name: "D2 - Fan Speed"
     accuracy_decimals: 0
   - platform: template
-    id: livingroom_timer
-    name: "Livingroom Timer 2"
+    id: d2_timer
+    name: "D2 - Timer"
+    unit_of_measurement: "min"
+    accuracy_decimals: 0
+  # --- Device 3 ---
+  - platform: template
+    id: d3_brightness
+    name: "D3 - Brightness"
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+  - platform: template
+    id: d3_color_temp
+    name: "D3 - Color Temp"
+    unit_of_measurement: "K"
+    accuracy_decimals: 0
+  - platform: template
+    id: d3_fan_speed
+    name: "D3 - Fan Speed"
+    accuracy_decimals: 0
+  - platform: template
+    id: d3_timer
+    name: "D3 - Timer"
+    unit_of_measurement: "min"
+    accuracy_decimals: 0
+  # --- Device 4 ---
+  - platform: template
+    id: d4_brightness
+    name: "D4 - Brightness"
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+  - platform: template
+    id: d4_color_temp
+    name: "D4 - Color Temp"
+    unit_of_measurement: "K"
+    accuracy_decimals: 0
+  - platform: template
+    id: d4_fan_speed
+    name: "D4 - Fan Speed"
+    accuracy_decimals: 0
+  - platform: template
+    id: d4_timer
+    name: "D4 - Timer"
     unit_of_measurement: "min"
     accuracy_decimals: 0
 
 text_sensor:
-  # --- Device 1: Bedroom ---
+  # --- Device 1 to 4 ---
   - platform: template
-    id: bedroom_fan_direction
-    name: "Bedroom Fan Direction 1"
-    
-  # --- Device 2: Livingroom ---
+    id: d1_fan_direction
+    name: "D1 - Fan Direction"
   - platform: template
-    id: livingroom_fan_direction
-    name: "Livingroom Fan Direction 2"
+    id: d2_fan_direction
+    name: "D2 - Fan Direction"
+  - platform: template
+    id: d3_fan_direction
+    name: "D3 - Fan Direction"
+  - platform: template
+    id: d4_fan_direction
+    name: "D4 - Fan Direction"
 
 # ==========================================
-# 2. 核心：BLE 广播监听与多设备状态路由
+# 2. 核心：BLE 广播监听与 4 设备状态路由
 # ==========================================
 esp32_ble_tracker:
   scan_parameters:
@@ -136,7 +196,6 @@ esp32_ble_tracker:
         - lambda: |-
             auto datas = x.get_manufacturer_datas();
             for (auto &data : datas) {
-                // 1. 将字节数组转换为小写 hex 字符串
                 std::string he = "";
                 for (uint8_t b : data.data) {
                     char buf[3];
@@ -144,11 +203,10 @@ esp32_ble_tracker:
                     he += buf;
                 }
                 
-                // 2. 校验数据长度和协议头 (8153)
                 if (he.length() < 40) continue; 
                 if (he.substr(0, 4) != "8153") continue;
 
-                // 3. 【核心】从广播数据中提取并反转 MAC 地址 (位置 6:18)
+                // 提取并反转 MAC 地址 (位置 6:18)
                 std::string mac_raw = he.substr(6, 12);
                 std::string mac = "";
                 for (int i = 10; i >= 0; i -= 2) {
@@ -156,50 +214,64 @@ esp32_ble_tracker:
                     if (i > 0) mac += ":";
                 }
 
-                // === 开始解析通用状态数据 ===
+                // 解析通用状态数据
                 int mode = strtol(he.substr(22, 2).c_str(), nullptr, 16);
                 bool led_on = (mode & 0x01) != 0;
                 bool fan_on = !(mode == 0x10 || mode == 0x11);
                 bool fan_reverse = (mode & 0x20) != 0;
                 
-                int bright_hex = strtol(he.substr(28, 2).c_str(), nullptr, 16);
-                float brightness_pct = (bright_hex / 255.0f) * 100.0f;
-                
-                int color_hex = strtol(he.substr(30, 2).c_str(), nullptr, 16);
-                float color_pct = color_hex / 255.0f;
+                float brightness_pct = (strtol(he.substr(28, 2).c_str(), nullptr, 16) / 255.0f) * 100.0f;
+                float color_pct = strtol(he.substr(30, 2).c_str(), nullptr, 16) / 255.0f;
                 float color_kelvin = 2700.0f + (6500.0f - 2700.0f) * color_pct;
                 
                 int timer_min = strtol(he.substr(32, 4).c_str(), nullptr, 16);
-                
-                int fan_hex = strtol(he.substr(36, 2).c_str(), nullptr, 16);
-                int fan_speed = fan_on ? (fan_hex + 1) : 0;
-                
+                int fan_speed = fan_on ? (strtol(he.substr(36, 2).c_str(), nullptr, 16) + 1) : 0;
                 std::string fan_dir_str = fan_on ? (fan_reverse ? "Reverse" : "Forward") : "Off";
 
-                // === 根据 MAC 地址路由到对应的传感器实体 ===
+                // === 根据 MAC 地址路由到对应的 4 个设备 ===
                 
-                // 【Device 1: Bedroom】
-                if (mac == "00:00:70:38:ab:cd") {
-                    id(bedroom_led_state).publish_state(led_on);
-                    id(bedroom_brightness).publish_state(brightness_pct);
-                    id(bedroom_color_temp).publish_state(color_kelvin);
-                    id(bedroom_fan_state).publish_state(fan_on);
-                    id(bedroom_fan_speed).publish_state(fan_speed);
-                    id(bedroom_fan_direction).publish_state(fan_dir_str);
-                    id(bedroom_timer).publish_state(timer_min);
+                // 【Device 1】
+                if (mac == "00:00:70:27:80:48") {
+                    id(d1_led_state).publish_state(led_on);
+                    id(d1_brightness).publish_state(brightness_pct);
+                    id(d1_color_temp).publish_state(color_kelvin);
+                    id(d1_fan_state).publish_state(fan_on);
+                    id(d1_fan_speed).publish_state(fan_speed);
+                    id(d1_fan_direction).publish_state(fan_dir_str);
+                    id(d1_timer).publish_state(timer_min);
                 } 
-                // 【Device 2: Livingroom】
-                else if (mac == "00:00:70:27:80:48") {
-                    id(livingroom_led_state).publish_state(led_on);
-                    id(livingroom_brightness).publish_state(brightness_pct);
-                    id(livingroom_color_temp).publish_state(color_kelvin);
-                    id(livingroom_fan_state).publish_state(fan_on);
-                    id(livingroom_fan_speed).publish_state(fan_speed);
-                    id(livingroom_fan_direction).publish_state(fan_dir_str);
-                    id(livingroom_timer).publish_state(timer_min);
+                // 【Device 2】
+                else if (mac == "00:00:70:35:26:92") {
+                    id(d2_led_state).publish_state(led_on);
+                    id(d2_brightness).publish_state(brightness_pct);
+                    id(d2_color_temp).publish_state(color_kelvin);
+                    id(d2_fan_state).publish_state(fan_on);
+                    id(d2_fan_speed).publish_state(fan_speed);
+                    id(d2_fan_direction).publish_state(fan_dir_str);
+                    id(d2_timer).publish_state(timer_min);
+                } 
+                // 【Device 3】
+                else if (mac == "00:00:70:38:ab:cd") {
+                    id(d3_led_state).publish_state(led_on);
+                    id(d3_brightness).publish_state(brightness_pct);
+                    id(d3_color_temp).publish_state(color_kelvin);
+                    id(d3_fan_state).publish_state(fan_on);
+                    id(d3_fan_speed).publish_state(fan_speed);
+                    id(d3_fan_direction).publish_state(fan_dir_str);
+                    id(d3_timer).publish_state(timer_min);
+                } 
+                // 【Device 4】 ⚠️ 注意：你提供的第4个MAC与第2个重复，此处使用占位符，请替换为真实MAC！
+                else if (mac == "00:00:70:35:26:94") { 
+                    id(d4_led_state).publish_state(led_on);
+                    id(d4_brightness).publish_state(brightness_pct);
+                    id(d4_color_temp).publish_state(color_kelvin);
+                    id(d4_fan_state).publish_state(fan_on);
+                    id(d4_fan_speed).publish_state(fan_speed);
+                    id(d4_fan_direction).publish_state(fan_dir_str);
+                    id(d4_timer).publish_state(timer_min);
                 }
                 
-                break; // 找到第一个匹配的 manufacturer data 就退出循环
+                break; 
             }
 
 # ==========================================
