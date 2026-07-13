@@ -181,16 +181,54 @@ esp32_ble_tracker:
 ble_gateway:
   id: ct1_ble
 
+# ==========================================
+# 3. 控制链路：4 个灯和 4 个风扇的控制实体
+# ==========================================
+ble_gateway:
+  id: ct1_ble
+
+# --- 4 个灯的控制 ---
 light:
   - platform: ble_light
-    id: bedroom_light
-    name: "Bedroom Light Control"
-    ble_device_id: "light.room1"
+    id: light_1_ctrl
+    name: "Light 1 Control"
+    ble_device_id: "light.device1"  # 必须与 device_table.cpp 中的 id 一致
+    gateway: ct1_ble
+  - platform: ble_light
+    id: light_2_ctrl
+    name: "Light 2 Control"
+    ble_device_id: "light.device2"
+    gateway: ct1_ble
+  - platform: ble_light
+    id: light_3_ctrl
+    name: "Light 3 Control"
+    ble_device_id: "light.device3"
+    gateway: ct1_ble
+  - platform: ble_light
+    id: light_4_ctrl
+    name: "Light 4 Control"
+    ble_device_id: "light.device4"
     gateway: ct1_ble
 
+# --- 4 个风扇的控制 ---
 fan:
   - platform: ble_fan
-    id: bedroom_fan
-    name: "Bedroom Fan Control"
-    ble_device_id: "fan.room1"
+    id: fan_1_ctrl
+    name: "Fan 1 Control"
+    ble_device_id: "fan.device1"    # 必须与 device_table.cpp 中的 id 一致
+    gateway: ct1_ble
+  - platform: ble_fan
+    id: fan_2_ctrl
+    name: "Fan 2 Control"
+    ble_device_id: "fan.device2"
+    gateway: ct1_ble
+  - platform: ble_fan
+    id: fan_3_ctrl
+    name: "Fan 3 Control"
+    ble_device_id: "fan.device3"
+    gateway: ct1_ble
+  - platform: ble_fan
+    id: fan_4_ctrl
+    name: "Fan 4 Control"
+    ble_device_id: "fan.device4"
     gateway: ct1_ble
