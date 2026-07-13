@@ -1,5 +1,7 @@
 #include "config_manager.h"
 
+#include "device_table.h"
+
 #include "esphome/core/log.h"
 
 
@@ -13,54 +15,24 @@ static const char *TAG="config_manager";
 
 
 
+
 void ConfigManager::load()
 {
 
 
-    ESP_LOGI(
-        TAG,
-        "Loading device commands"
+    DeviceTable::load(
+        commands_
     );
-
-
-
-    BLEDeviceCommand light;
-
-
-
-    light.name =
-        "light.room1.toggle";
-
-
-
-    light.packets.push_back(
-        "0201021BFFA806810F99CDAB38700000A939387670002078053DCDCDE31BA3"
-    );
-
-
-
-    light.packets.push_back(
-        "0201021BFFA806810F19CDAB38700000043CCDCDE31BABABA8383870700022"
-    );
-
-
-
-    commands_[
-        light.name
-    ] =
-        light;
-
 
 
     ESP_LOGI(
         TAG,
-        "Loaded commands:%d",
+        "Config loaded:%d",
         commands_.size()
     );
 
 
 }
-
 
 
 
@@ -83,7 +55,6 @@ bool ConfigManager::get_command(
     )
     {
 
-
         ESP_LOGW(
             TAG,
             "command not found:%s",
@@ -101,9 +72,7 @@ bool ConfigManager::get_command(
         it->second;
 
 
-
     return true;
-
 
 }
 
