@@ -92,8 +92,7 @@ ble_gateway:
   id: ct1_ble
 light:
   - platform: ble_light
-    id: my_bedroom_light      # <--- 【新增】显式指定一个唯一的 ID
+    id: my_bedroom_light      # 这个 ID 现在会安全地分配给 LightState
     name: "卧室灯"
     ble_device_id: "light.room1"
     gateway: ct1_ble
-  
