@@ -21,6 +21,9 @@ void BLEGateway::setup()
         "BLE Gateway ready"
     );
 
+
+    config_manager_.load();
+
 }
 
 
@@ -188,7 +191,51 @@ void BLEGateway::send_hex(
         hex.c_str()
     );
 
+BLEDeviceCommand cmd;
 
+
+if(
+    config_manager_.get_command(
+        hex,
+        cmd
+    )
+)
+{
+
+    ESP_LOGI(
+        TAG,
+        "COMMAND FOUND:%s",
+        hex.c_str()
+    );
+
+
+    std::string packets;
+
+
+    for(
+        size_t i=0;
+        i<cmd.packets.size();
+        i++
+    )
+    {
+
+        if(i>0)
+            packets += "|";
+
+
+        packets += cmd.packets[i];
+
+    }
+
+
+    send_hex(
+        packets
+    );
+
+
+    return;
+
+}
 
     /*
      * 多包处理
