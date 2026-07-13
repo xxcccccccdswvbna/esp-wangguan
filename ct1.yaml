@@ -2,104 +2,124 @@ esphome:
   name: ct1
   friendly_name: CT1 BLE Gateway
 
-
 esp32:
   board: esp32dev
   flash_size: 4MB
-
   framework:
     type: esp-idf
-
     sdkconfig_options:
       CONFIG_FREERTOS_UNICORE: y
-
       CONFIG_BT_ENABLED: y
       CONFIG_BT_BLE_ENABLED: y
-
-
 
 logger:
   baud_rate: 0
 
-
-
 wifi:
-
   ssid: "CC"
   password: "chen1122"
-
   fast_connect: true
-
   power_save_mode: none
-
-
   ap:
     ssid: "CT1 Fallback"
     password: "12345678"
 
-
-
 captive_portal:
-
-
 web_server:
-
-
 api:
   reboot_timeout: 0s
-
-
-
 ota:
   - platform: esphome
 
-
-
-
 mqtt:
-
   broker: "192.168.6.88"
-
-
   on_message:
-
     - topic: "ct1/ble/send"
-
       then:
-
         - lambda: |-
-
             id(ct1_ble).send_hex(x);
-
-
-
-
 
 external_components:
   - source:
       type: local
       path: components
 
-
+# ==========================================
+# 核心：BLE 广播监听与状态解析
+# ==========================================
 esp32_ble_tracker:
   scan_parameters:
     interval: 320ms
     window: 30ms
     active: false
+  on_ble_advertise:
+    - mac_address: "00:00:70:49:a8:7d"  # 【注意】这里填你风扇灯的真实 MAC，必须全小写！
+      then:
+        - lambda: |-
+            auto datas = x.get_manufacturer_datas();
+            for (auto &data : datas) {
+                // 将字节数组转换为 hex 字符串
+                std::string he = "";
+                for (uint8_t b : data.data) {
+                    char buf[3];
+                    sprintf(buf, "%02x", b);
+                    he += buf;
+                }
+                
+                if (he.length() < 40) continue; // 确保长度足够
+                
+                // 1. 解析 mode (位置 22:24)
+                int mode = strtol(he.substr(22, 2).c_str(), nullptr, 16);
+                bool led_on = (mode & 0x01) != 0;
+                
+                // 2. 解析亮度 (位置 28:30)
+                int bright_hex = strtol(he.substr(28, 2).c_str(), nullptr, 16);
+                float brightness = bright_hex / 255.0f;
+                
+                // 3. 解析色温 (位置 30:32)
+                int color_hex = strtol(he.substr(30, 2).c_str(), nullptr, 16);
+                float color_percent = color_hex / 255.0f;
+                int kelvin = 2700 + (6500 - 2700) * color_percent;
+                float mireds = 1000000.0f / kelvin;
+                
+                // 4. 更新灯状态 (id 必须和下面 light 配置的 id 一致)
+                id(bedroom_light_output).update_from_ble(led_on, brightness, mireds);
+                
+                // 5. 解析风扇状态
+                bool fan_on = !(mode == 0x10 || mode == 0x11);
+                bool fan_forward = (mode & 0x20) == 0; // 0x20 是反转，取反为正转
+                
+                int fan_speed = 0;
+                if (fan_on) {
+                    // 风扇档位 (位置 36:38，即倒数第4到第2个字符)
+                    int fan_hex = strtol(he.substr(36, 2).c_str(), nullptr, 16);
+                    fan_speed = fan_hex + 1;
+                }
+                
+                // 6. 更新风扇状态 (id 必须和下面 fan 配置的 id 一致)
+                id(bedroom_fan).update_from_ble(fan_on, fan_speed, fan_forward);
+                
+                break; // 只处理第一个匹配的 manufacturer data
+            }
 
-
+# ==========================================
+# 设备配置
+# ==========================================
 ble_gateway:
   id: ct1_ble
+
 light:
   - platform: ble_light
-    id: my_bedroom_light
+    # 【关键】这个 id 用于 lambda 中调用 update_from_ble
+    id: bedroom_light_output 
     name: "卧室灯"
     ble_device_id: "light.room1"
     gateway: ct1_ble
 
 fan:
   - platform: ble_fan
-    id: my_bedroom_fan
+    # 【关键】这个 id 用于 lambda 中调用 update_from_ble
+    id: bedroom_fan 
     name: "卧室风扇"
     ble_device_id: "fan.room1"
     gateway: ct1_ble
