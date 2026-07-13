@@ -1,7 +1,7 @@
 {
   "id": "device.diningroom",
   "name": "餐厅风扇灯",
-  "mac": "00:00:70:99:88:77", 
+  "mac": "00:00:70:38:AB:CD", 
   
   "light": {
     "id": "light.diningroom",
