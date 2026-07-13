@@ -11,7 +11,8 @@ namespace ble_gateway {
 
 
 
-static const char *TAG="config_manager";
+static const char *TAG =
+    "config_manager";
 
 
 
@@ -19,60 +20,67 @@ static const char *TAG="config_manager";
 void ConfigManager::load()
 {
 
+    devices_.clear();
+
+
 
     DeviceTable::load(
-        commands_
+        devices_
     );
+
 
 
     ESP_LOGI(
         TAG,
         "Config loaded:%d",
-        commands_.size()
+        devices_.size()
     );
-
 
 }
 
 
 
 
-bool ConfigManager::get_decice(
+bool ConfigManager::get_command(
     const std::string &name,
-    BLEDeviceCommand &cmd
+    BLEDevice &device
 )
 
 {
 
 
-    auto it =
-        commands_.find(name);
-
-
-
-    if(
-        it == commands_.end()
+    for(
+        auto &dev : devices_
     )
     {
 
-        ESP_LOGW(
-            TAG,
-            "command not found:%s",
-            name.c_str()
-        );
+
+        if(
+            dev.id == name
+        )
+        {
+
+            device = dev;
 
 
-        return false;
+            return true;
+
+        }
+
 
     }
 
 
 
-    cmd =
-        it->second;
+    ESP_LOGW(
+        TAG,
+        "device not found:%s",
+        name.c_str()
+    );
 
 
-    return true;
+
+    return false;
 
 }
 
