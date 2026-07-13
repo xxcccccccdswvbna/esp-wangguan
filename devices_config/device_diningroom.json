@@ -1,0 +1,45 @@
+{
+  "id": "device.diningroom",
+  "name": "餐厅风扇灯",
+  "mac": "00:00:70:99:88:77", 
+  
+  "light": {
+    "id": "light.diningroom",
+    "actions": {
+      "on": [
+        "0201021BFF114D1914F0CF2D70000001F1FC39CFCF9D2D2D7070005CBF1D68",
+        "0201021BFF114D1911F0CF2D700000011C60F0F0FC3FCFCF9D2D2D7070005E"
+      ],
+      "off": [
+        "0201021BFF114D191AF0CF2D700000012C2D7670005CBF1D60F0F0FC3FCFC7",
+        "0201021BFF114D1912F0CF2D7000000161F0F0FC3FCFCF9D2D2D7070005CBD"
+      ],
+      "brightness_1": ["替换为真实HEX_1", "替换为真实HEX_2"],
+      "brightness_20": ["替换为真实HEX_1", "替换为真实HEX_2"],
+      "brightness_40": ["替换为真实HEX_1", "替换为真实HEX_2"],
+      "brightness_50": ["替换为真实HEX_1", "替换为真实HEX_2"],
+      "brightness_60": ["替换为真实HEX_1", "替换为真实HEX_2"],
+      "brightness_80": ["替换为真实HEX_1", "替换为真实HEX_2"],
+      "brightness_100": ["替换为真实HEX_1", "替换为真实HEX_2"],
+      "color_2700": ["替换为真实HEX_1", "替换为真实HEX_2"],
+      "color_3500": ["替换为真实HEX_1", "替换为真实HEX_2"],
+      "color_6500": ["替换为真实HEX_1", "替换为真实HEX_2"]
+    }
+  },
+  
+  "fan": {
+    "id": "fan.diningroom",
+    "actions": {
+      "on": ["替换为真实HEX_1", "替换为真实HEX_2"],
+      "off": ["替换为真实HEX_1", "替换为真实HEX_2"],
+      "speed_1": ["替换为真实HEX_1", "替换为真实HEX_2"],
+      "speed_2": ["替换为真实HEX_1", "替换为真实HEX_2"],
+      "speed_3": ["替换为真实HEX_1", "替换为真实HEX_2"],
+      "speed_4": ["替换为真实HEX_1", "替换为真实HEX_2"],
+      "speed_5": ["替换为真实HEX_1", "替换为真实HEX_2"],
+      "speed_6": ["替换为真实HEX_1", "替换为真实HEX_2"],
+      "forward": ["替换为真实HEX_1", "替换为真实HEX_2"],
+      "reverse": ["替换为真实HEX_1", "替换为真实HEX_2"]
+    }
+  }
+}
