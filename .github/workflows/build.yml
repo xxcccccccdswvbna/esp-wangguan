@@ -8,7 +8,7 @@ on:
   push:
 
     branches:
-      - main
+      - "**"
 
 
 
@@ -104,6 +104,9 @@ jobs:
           body: |
 
             ESP32 CT1 自动编译固件
+
+            Branch:
+            ${{ github.ref_name }}
 
             Commit:
             ${{ github.sha }}
