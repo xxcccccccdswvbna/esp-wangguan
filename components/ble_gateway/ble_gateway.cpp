@@ -37,9 +37,6 @@ void BLEGateway::loop()
 
     /*
      * BLE GAP 冷却等待
-     *
-     * 防止连续切换广播导致
-     * ESP32 BLE 栈未释放
      */
     if(cooldown_)
     {
@@ -66,7 +63,7 @@ void BLEGateway::loop()
 
 
     /*
-     * 广播运行超过100ms停止
+     * 广播停止
      */
     if(
         adv_running_ &&
@@ -95,17 +92,11 @@ void BLEGateway::loop()
 
 
 
-        /*
-         * 如果还有下一包
-         */
         if(
             !packet_queue_.empty()
         )
         {
 
-            /*
-             * 下一包等待1秒
-             */
             next_packet_time_ =
                 millis() + 1000;
 
@@ -121,7 +112,7 @@ void BLEGateway::loop()
 
 
     /*
-     * 发送下一包
+     * 下一包
      */
     if(
         waiting_next_packet_ &&
@@ -166,10 +157,9 @@ BLEGateway::hex_to_bytes(
 
 
 
-    /*
-     * 过滤非HEX字符
-     */
-    for(char c : hex)
+    for(
+        char c : hex
+    )
     {
 
         if(
@@ -219,9 +209,6 @@ BLEGateway::hex_to_bytes(
 
 
 
-
-
-
 void BLEGateway::send_hex(
     std::string hex
 )
@@ -236,19 +223,15 @@ void BLEGateway::send_hex(
 
 
 
-
-
     /*
-     * 命令模式
+     * 查询设备配置
      *
      * 例如:
      *
-     * light_toggle
+     * light.room1
      *
-     * 从 config_manager
-     * 查找设备配置
      */
-    BLEDeviceCommand cmd;
+    BLEDevice device;
 
 
 
@@ -257,7 +240,7 @@ void BLEGateway::send_hex(
         hex.find("020102") != 0 &&
         config_manager_.get_command(
             hex,
-            cmd
+            device
         )
     )
     {
@@ -275,9 +258,20 @@ void BLEGateway::send_hex(
 
 
 
+        /*
+         * 临时默认动作 on
+         *
+         * 后续扩展 action
+         */
+        auto action =
+            device.actions["on"];
+
+
+
+
         for(
             size_t i = 0;
-            i < cmd.packets.size();
+            i < action.packets.size();
             i++
         )
         {
@@ -288,19 +282,13 @@ void BLEGateway::send_hex(
             }
 
 
-
             packets +=
-                cmd.packets[i];
+                action.packets[i];
 
         }
 
 
 
-
-        /*
-         * 转成 HEX|HEX
-         * 进入发送流程
-         */
         send_hex(
             packets
         );
@@ -309,13 +297,6 @@ void BLEGateway::send_hex(
         return;
 
     }
-
-
-
-
-
-
-
     /*
      * 多包发送
      *
@@ -381,10 +362,8 @@ void BLEGateway::send_hex(
 
 
 
-
-
         /*
-         * 立即发送第一包
+         * 发送第一包
          */
         send_next_packet();
 
@@ -399,10 +378,8 @@ void BLEGateway::send_hex(
 
 
 
-
-
     /*
-     * 单包HEX
+     * 单HEX包
      */
     send_raw_packet(
         hex
@@ -410,8 +387,17 @@ void BLEGateway::send_hex(
 
 
 }
+
+
+
+
+
+
+
+
 void BLEGateway::send_next_packet()
 {
+
 
     if(
         packet_queue_.empty()
@@ -421,6 +407,7 @@ void BLEGateway::send_next_packet()
         return;
 
     }
+
 
 
 
@@ -490,7 +477,6 @@ void BLEGateway::send_raw_packet(
 
 
 
-
     esp_err_t err =
         esp_ble_gap_config_adv_data_raw(
             data.data(),
@@ -505,7 +491,6 @@ void BLEGateway::send_raw_packet(
         data.size(),
         err
     );
-
 
 
 
@@ -529,7 +514,7 @@ void BLEGateway::send_raw_packet(
 
 
     /*
-     * 不连接广播
+     * 非连接广播
      */
     params.adv_type =
         ADV_TYPE_NONCONN_IND;
