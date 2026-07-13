@@ -1,7 +1,7 @@
 import esphome.codegen as cg
 import esphome.config_validation as cv
 from esphome.components import fan
-from esphome.const import CONF_ID, CONF_NAME
+from esphome.const import CONF_ID, CONF_NAME, CONF_RESTORE_MODE
 
 DEPENDENCIES = ["ble_gateway"]
 
@@ -14,12 +14,25 @@ BLEGateway = ble_gateway_ns.class_("BLEGateway", cg.Component)
 CONF_BLE_DEVICE_ID = "ble_device_id"
 CONF_GATEWAY = "gateway"
 
-# 【修正】继承 cv.ENTITY_BASE_SCHEMA，自动补全 disabled_by_default 等实体基础配置
+# 【关键修正】手动定义 restore_mode 的 C++ 枚举映射，绕过 ESPHome Python 层的 API 变动
+FanRestoreMode = cg.global_ns.namespace("fan").enum("FanRestoreMode")
+RESTORE_MODES = {
+    "NO_RESTORE": FanRestoreMode.NO_RESTORE,
+    "RESTORE_DEFAULT_OFF": FanRestoreMode.RESTORE_DEFAULT_OFF,
+    "RESTORE_DEFAULT_ON": FanRestoreMode.RESTORE_DEFAULT_ON,
+    "RESTORE_INVERTED_DEFAULT_OFF": FanRestoreMode.RESTORE_INVERTED_DEFAULT_OFF,
+    "RESTORE_INVERTED_DEFAULT_ON": FanRestoreMode.RESTORE_INVERTED_DEFAULT_ON,
+    "ALWAYS_OFF": FanRestoreMode.ALWAYS_OFF,
+    "ALWAYS_ON": FanRestoreMode.ALWAYS_ON,
+}
+
 CONFIG_SCHEMA = cv.Schema({
     cv.GenerateID(): cv.declare_id(BLEFan),
     cv.Required(CONF_NAME): cv.string,
     cv.Required(CONF_BLE_DEVICE_ID): cv.string,
     cv.Required(CONF_GATEWAY): cv.use_id(BLEGateway),
+    # 【关键修正】添加 restore_mode 配置，默认值为断电后默认关闭
+    cv.Optional(CONF_RESTORE_MODE, default="RESTORE_DEFAULT_OFF"): cv.enum(RESTORE_MODES, upper=True, space="UNDERSCORE"),
 }).extend(cv.COMPONENT_SCHEMA).extend(cv.ENTITY_BASE_SCHEMA)
 
 async def to_code(config):
