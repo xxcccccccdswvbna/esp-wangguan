@@ -1,0 +1,10 @@
+{
+  "id": "fan.room1",
+  "type": "fan",
+  "name": "卧室风扇",
+  "actions": {
+    "on": ["请替换为真实HEX_1", "请替换为真实HEX_2"],
+    "off": ["0201021BFF114D1912F0CF2D7000000161F0F9FC3FCFCF9D2D2D7070005CB4", "0201021BFF114D1910F0CF2D70000001BE1D60F0F0FC3FCFCF9D2D2D707002"]
+    // ... 其他档位动作
+  }
+}
