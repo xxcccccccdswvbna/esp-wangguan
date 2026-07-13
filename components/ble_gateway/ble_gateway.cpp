@@ -61,7 +61,7 @@ void BLEGateway::loop()
         {
 
             next_packet_time_ =
-                millis() + 500;
+                millis() + 100;
 
 
             waiting_next_packet_ = true;
