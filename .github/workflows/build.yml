@@ -1,122 +1,82 @@
-name: Build CT1 Firmware
-
+name: Build and Release CT1 Firmware
 
 on:
-
-  workflow_dispatch:
-
+  # 1. 推送到指定分支时自动触发
   push:
-
     branches:
-      - "**"
-
-
+      - CT1-V2.1
+  # 2. 支持在 GitHub 页面手动点击触发（非常实用）
+  workflow_dispatch:
 
 permissions:
   contents: write
 
-
-
 jobs:
-
-
   build:
-
-
     runs-on: ubuntu-latest
-
-
-
     steps:
-
-
-      # 拉取代码
-      - name: Checkout
+      # 1. 检出代码
+      - name: Checkout repository
         uses: actions/checkout@v4
 
+      # 2. 【核心关键】运行 Python 脚本，生成最新的 C++ 和 YAML 文件
+      # (这是你第二个配置中漏掉的致命步骤！)
+      - name: Generate Device Table from JSON
+        run: python3 generate_device_table.py
 
-
-      # 安装 Python
-      - name: Setup Python
+      # 3. 设置 Python 环境
+      - name: Set up Python
         uses: actions/setup-python@v5
-
         with:
+          python-version: '3.11'
 
-          python-version: "3.11"
-
-
-
-      # 安装 ESPHome
+      # 4. 安装 ESPHome
       - name: Install ESPHome
         run: |
-
           python -m pip install --upgrade pip
-
           pip install esphome
 
+      # 5. 编译固件
+      - name: Compile ESPHome firmware
+        run: esphome compile ct1.yaml
 
-
-      # 编译
-      - name: Compile CT1
-        run: |
-
-          esphome compile ct1.yaml
-
-
-
-      # 收集固件
+      # 6. 收集所有类型的固件文件
       - name: Collect firmware files
         run: |
-
           mkdir -p firmware
-
-
+          # 复制常规 OTA 固件
           cp .esphome/build/ct1/.pioenvs/ct1/firmware.bin firmware/
+          # 复制首次刷机的工厂固件 (包含 bootloader 和 partitions，最适合 USB 救砖)
+          cp .esphome/build/ct1/.pioenvs/ct1/firmware.factory.bin firmware/ 2>/dev/null || true
+          # 复制其他底层文件 (如果需要)
+          cp .esphome/build/ct1/.pioenvs/ct1/bootloader.bin firmware/ 2>/dev/null || true
+          cp .esphome/build/ct1/.pioenvs/ct1/partitions.bin firmware/ 2>/dev/null || true
+          
+          echo "===== 收集到的固件 ====="
+          ls -lh firmware/
 
-          cp .esphome/build/ct1/.pioenvs/ct1/firmware.factory.bin firmware/
-
-          cp .esphome/build/ct1/.pioenvs/ct1/firmware.ota.bin firmware/
-
-
-          cp .esphome/build/ct1/.pioenvs/ct1/bootloader.bin firmware/
-
-          cp .esphome/build/ct1/.pioenvs/ct1/partitions.bin firmware/
-
-          cp .esphome/build/ct1/.pioenvs/ct1/ota_data_initial.bin firmware/
-
-
-          echo "===== Firmware ====="
-
-          ls -lh firmware
-
-
-
-      # 发布 Release
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-
+      # 7. 上传为 Artifact (方便你在 Actions 页面直接下载，不污染 Release)
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
         with:
+          name: ct1-firmware-artifact
+          path: firmware/
+          retention-days: 7
 
-          tag_name: ct1-${{ github.run_number }}
-
-          name: CT1 Firmware ${{ github.run_number }}
-
+      # 8. 发布到 GitHub Release (可选：如果你希望每次 push 都生成一个正式版本)
+      # 注意：如果不想每次 push 都发 Release，可以把这个 step 删掉，只用第 7 步的 Artifact 即可
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ct1-v${{ github.run_number }}
+          name: CT1 Firmware Build #${{ github.run_number }}
           body: |
-
-            ESP32 CT1 自动编译固件
-
-            Branch:
-            ${{ github.ref_name }}
-
-            Commit:
-            ${{ github.sha }}
-
-
+            🚀 ESP32 CT1 自动编译固件
+            
+            - 分支: `${{ github.ref_name }}`
+            - 提交: `${{ github.sha }}`
+            - 包含: `firmware.bin` (OTA升级), `firmware.factory.bin` (USB首次刷机救砖)
           files: |
-
             firmware/*.bin
-
-
         env:
-
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
