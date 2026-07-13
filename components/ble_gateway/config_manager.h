@@ -1,30 +1,42 @@
 #pragma once
 
+
 #include <string>
 #include <vector>
+#include <map>
+
 
 
 namespace esphome {
 namespace ble_gateway {
 
 
+
 struct BLEDeviceCommand
 {
+
     std::string name;
+
 
     std::vector<std::string> packets;
 
-    uint32_t delay;
+
 };
+
+
+
 
 
 
 class ConfigManager
 {
 
+
 public:
 
-    bool load();
+
+    void load();
+
 
 
     bool get_command(
@@ -33,12 +45,19 @@ public:
     );
 
 
+
 private:
 
-    std::vector<BLEDeviceCommand> commands_;
+
+    std::map<
+        std::string,
+        BLEDeviceCommand
+    > commands_;
+
 
 
 };
+
 
 
 
