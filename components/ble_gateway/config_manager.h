@@ -27,7 +27,7 @@ public:
 
     bool get_command(
         const std::string &name,
-        BLEDeviceCommand &cmd
+        BLEDevice &cmd
     );
 
 
