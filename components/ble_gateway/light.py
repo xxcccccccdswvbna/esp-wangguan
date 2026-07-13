@@ -8,7 +8,6 @@ from . import ble_gateway_ns
 
 BLELight = ble_gateway_ns.class_(
     "BLELight",
-    cg.Component,
     light.LightOutput
 )
 
@@ -16,7 +15,9 @@ BLELight = ble_gateway_ns.class_(
 CONF_DEVICE = "device"
 
 
-CONFIG_SCHEMA = light.LIGHT_SCHEMA.extend(
+CONFIG_SCHEMA = light.light_schema(
+    BLELight
+).extend(
     {
         cv.Required(CONF_DEVICE): cv.string,
     }
@@ -30,12 +31,6 @@ async def to_code(config):
     )
 
 
-    await cg.register_component(
-        var,
-        config
-    )
-
-
     await light.register_light(
         var,
         config
@@ -43,7 +38,7 @@ async def to_code(config):
 
 
     cg.add(
-        var.set_device_id(
+        var.set_device(
             config[CONF_DEVICE]
         )
     )
