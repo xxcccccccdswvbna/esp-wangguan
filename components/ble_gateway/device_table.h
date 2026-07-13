@@ -4,6 +4,7 @@
 #include "device_model.h"
 
 #include <vector>
+#include <string>
 
 
 namespace esphome {
@@ -15,15 +16,17 @@ class DeviceTable
 
 public:
 
-    static void load(
+
+    void load(
         std::vector<BLEDevice> &devices
     );
+
 
 
 private:
 
 
-    static void add_device(
+    void add_device(
         std::vector<BLEDevice> &devices,
         std::string id,
         std::string type,
@@ -31,7 +34,8 @@ private:
     );
 
 
-    static void add_action(
+
+    void add_action(
         std::vector<BLEDevice> &devices,
         std::string device_id,
         std::string action,
@@ -40,6 +44,7 @@ private:
 
 
 };
+
 
 
 }
