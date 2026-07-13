@@ -3,8 +3,10 @@
 
 #include "esphome/core/component.h"
 
+#include "config_manager.h"
+
 #include <vector>
-#include <string>
+#include <string>>
 
 
 namespace esphome {
