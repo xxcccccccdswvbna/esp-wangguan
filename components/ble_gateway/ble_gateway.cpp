@@ -29,18 +29,16 @@ void BLEGateway::setup()
 
 
 
-
 void BLEGateway::loop()
 {
 
 
     /*
-     * 停止当前广播
+     * 广播运行超过100ms停止
      */
-
     if(
         adv_running_ &&
-        millis() - adv_start_time_ > 100
+        millis() - adv_start_time_ >= 100
     )
     {
 
@@ -57,9 +55,8 @@ void BLEGateway::loop()
 
 
         /*
-         * 多包等待
+         * 如果还有下一包
          */
-
         if(!packet_queue_.empty())
         {
 
@@ -75,43 +72,30 @@ void BLEGateway::loop()
 
 
 
-if(just_stopped_)
-{
+    /*
+     * 下一包发送
+     */
+    if(
+        waiting_next_packet_ &&
+        millis() >= next_packet_time_
+    )
+    {
 
-    just_stopped_ = false;
-
-    return;
-
-}
-
-
-/*
- * 发送下一包
- */
-
-if(
-    waiting_next_packet_ &&
-    millis() >= next_packet_time_
-)
-{
-
-    waiting_next_packet_ = false;
+        waiting_next_packet_ = false;
 
 
-    ESP_LOGI(
-        TAG,
-        "SEND NEXT PACKET"
-    );
+        ESP_LOGI(
+            TAG,
+            "SEND NEXT PACKET"
+        );
 
 
-    send_next_packet();
+        send_next_packet();
 
-}
+    }
 
 
 }
-
-
 
 
 
@@ -130,6 +114,9 @@ BLEGateway::hex_to_bytes(
     std::string clean;
 
 
+    /*
+     * 过滤非HEX字符
+     */
     for(char c : hex)
     {
 
@@ -148,12 +135,12 @@ BLEGateway::hex_to_bytes(
 
     for(
         size_t i=0;
-        i+1 < clean.length();
-        i+=2
+        i + 1 < clean.length();
+        i += 2
     )
     {
 
-        uint8_t b =
+        uint8_t value =
             strtol(
                 clean.substr(i,2)
                 .c_str(),
@@ -162,7 +149,7 @@ BLEGateway::hex_to_bytes(
             );
 
 
-        data.push_back(b);
+        data.push_back(value);
 
     }
 
@@ -177,13 +164,11 @@ BLEGateway::hex_to_bytes(
 
 
 
-
 void BLEGateway::send_hex(
     std::string hex
 )
 
 {
-
 
     ESP_LOGI(
         TAG,
@@ -191,56 +176,79 @@ void BLEGateway::send_hex(
         hex.c_str()
     );
 
-BLEDeviceCommand cmd;
 
 
-if(
-    config_manager_.get_command(
-        hex,
-        cmd
-    )
-)
-{
-
-    ESP_LOGI(
-        TAG,
-        "COMMAND FOUND:%s",
-        hex.c_str()
-    );
+    /*
+     * 1.
+     * 先查设备配置
+     *
+     * 例如:
+     *
+     * light_toggle
+     *
+     */
+    BLEDeviceCommand cmd;
 
 
-    std::string packets;
-
-
-    for(
-        size_t i=0;
-        i<cmd.packets.size();
-        i++
+    if(
+        config_manager_.get_command(
+            hex,
+            cmd
+        )
     )
     {
 
-        if(i>0)
-            packets += "|";
+        ESP_LOGI(
+            TAG,
+            "COMMAND FOUND:%s",
+            hex.c_str()
+        );
 
 
-        packets += cmd.packets[i];
+        std::string packets;
+
+
+
+        for(
+            size_t i=0;
+            i < cmd.packets.size();
+            i++
+        )
+        {
+
+            if(i > 0)
+            {
+                packets += "|";
+            }
+
+
+            packets += cmd.packets[i];
+
+        }
+
+
+
+        /*
+         * 转HEX发送
+         */
+        send_hex(
+            packets
+        );
+
+
+        return;
 
     }
 
 
-    send_hex(
-        packets
-    );
-
-
-    return;
-
-}
 
     /*
-     * 多包处理
+     * 2.
+     * 多包
+     *
+     * HEX|HEX
+     *
      */
-
     if(
         hex.find("|") != std::string::npos
     )
@@ -254,6 +262,7 @@ if(
         size_t start = 0;
 
 
+
         while(true)
         {
 
@@ -264,6 +273,7 @@ if(
                 );
 
 
+
             if(pos == std::string::npos)
             {
 
@@ -271,9 +281,11 @@ if(
                     hex.substr(start)
                 );
 
+
                 break;
 
             }
+
 
 
             packet_queue_.push_back(
@@ -284,8 +296,9 @@ if(
             );
 
 
+
             start =
-                pos+1;
+                pos + 1;
 
         }
 
@@ -300,11 +313,14 @@ if(
 
 
 
-    /*
-     * 单包
-     */
 
-    send_raw_packet(hex);
+    /*
+     * 3.
+     * 单HEX包
+     */
+    send_raw_packet(
+        hex
+    );
 
 
 }
@@ -319,7 +335,10 @@ if(
 void BLEGateway::send_next_packet()
 {
 
-    if(packet_queue_.empty())
+
+    if(
+        packet_queue_.empty()
+    )
     {
 
         return;
@@ -339,10 +358,13 @@ void BLEGateway::send_next_packet()
 
 
 
-    send_raw_packet(packet);
+    send_raw_packet(
+        packet
+    );
 
 
 }
+
 
 
 
@@ -357,6 +379,7 @@ void BLEGateway::send_raw_packet(
 
 {
 
+
     ESP_LOGI(
         TAG,
         "BLE TX RAW:%s",
@@ -366,17 +389,22 @@ void BLEGateway::send_raw_packet(
 
 
     auto data =
-        hex_to_bytes(packet);
+        hex_to_bytes(
+            packet
+        );
 
 
 
-    if(data.size()<5)
+    if(
+        data.size() < 5
+    )
     {
 
         ESP_LOGW(
             TAG,
             "packet too short"
         );
+
 
         return;
 
@@ -399,6 +427,7 @@ void BLEGateway::send_raw_packet(
         data.size(),
         err
     );
+
 
 
 
@@ -435,7 +464,8 @@ void BLEGateway::send_raw_packet(
 
 
 
-    adv_running_ = true;
+    adv_running_ =
+        true;
 
 
 
@@ -444,7 +474,9 @@ void BLEGateway::send_raw_packet(
         "BLE ADV START"
     );
 
+
 }
+
 
 
 
