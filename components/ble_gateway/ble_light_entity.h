@@ -1,10 +1,9 @@
 #pragma once
 
-#include "esphome/components/light/light_output.h"
+#include "esphome/components/light/light.h"
 #include "esphome/core/component.h"
 
 #include "ble_gateway.h"
-
 
 namespace esphome {
 namespace ble_gateway {
