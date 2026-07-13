@@ -6,16 +6,8 @@ namespace ble_fan {
 
 static const char *TAG = "ble_fan";
 
-// 【关键】实现空的 setup 和 loop
-void BLEFan::setup() {
-    // 初始化逻辑（目前为空）
-}
-
-void BLEFan::loop() {
-    // 循环逻辑（目前为空）
-}
-
 fan::FanTraits BLEFan::get_traits() {
+    // 参数: 摇头(false), 调速(true), 正反转(true), 6个档位
     return fan::FanTraits(false, true, true, 6);
 }
 
@@ -29,6 +21,7 @@ void BLEFan::control(const fan::FanCall &call) {
     int target_speed = call.get_speed().value_or(this->speed);
     auto target_dir = call.get_direction().value_or(this->direction);
 
+    // 状态缓存 & 指令去重
     if (target_state == last_state_ && 
         target_speed == last_speed_ && 
         target_dir == last_direction_) {
@@ -61,6 +54,7 @@ void BLEFan::control(const fan::FanCall &call) {
         }
     }
 
+    // 更新 HA 状态
     auto state_call = this->make_call();
     state_call.set_state(target_state);
     state_call.set_speed(target_speed);
