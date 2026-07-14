@@ -4,7 +4,7 @@
   "mac": "00:00:70:2d:cf:f0", 
   
   "light": {
-    "id": "light.kt",
+    "id": "light.cw",       // 【修改】改为 light.cw，确保全局唯一！
     "actions": {
       "on": [
         "0x0201021BFF114D1917F0CF2D70000001CECF9B2D2D7070005CBF1D60F0F0F4",
@@ -28,7 +28,7 @@
   },
   
   "fan": {
-    "id": "fan.kt",
+    "id": "fan.cw",          // 【修改】改为 fan.cw，确保全局唯一！
     "actions": {
       "on": ["0x0201021BFF114D1911F0CF2D700000011C60F9F0FC3FCFCF9D2D2D70700057", "0x0201021BFF114D191DF0CF2D7000000171005CBF1D60F0F0FC3FCFCF9D2D2F"],
       "off": ["0x0201021BFF114D191BF0CF2D700000012C7079005CBF1D60F0F0FC3FCFCF96", "0x0201021BFF114D1918F0CF2D70000001CE9D2D2D7070005CBF1D60F0F0FC3D"],
