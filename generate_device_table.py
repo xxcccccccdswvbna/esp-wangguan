@@ -236,11 +236,11 @@ def generate_cpp(devices, out_path: Path):
     lines += [
         "",
         "}",
-        "void DeviceTable::add_device(std::vector<BLEDevice> &d, std::string id, "
-        "std::string type, std::string name) { BLEDevice device; device.id=id; "
+        "void DeviceTable::add_device(std::vector<BLEDevice> &d, const std::string &id, "
+        "const std::string &type, const std::string &name) { BLEDevice device; device.id=id; "
         "device.type=type; device.name=name; d.push_back(device); }",
-        "void DeviceTable::add_action(std::vector<BLEDevice> &d, std::string did, "
-        "std::string action, std::vector<std::string> packets) { for(auto &device:d)"
+        "void DeviceTable::add_action(std::vector<BLEDevice> &d, const std::string &did, "
+        "const std::string &action, std::vector<std::string> packets) { for(auto &device:d)"
         "{if(device.id==did){BLEAction act;act.name=action;act.packets=packets;"
         "device.actions[action]=act;return;}} }",
         "} // namespace ble_gateway",
