@@ -2,6 +2,7 @@
   "id": "device.cw3",
   "name": "次卧风扇灯",
   "mac": "00:00:70:2d:cf:f0", 
+   "protocol": "134D",
   
   "light": {
     "id": "light.cw1",
