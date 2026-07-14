@@ -196,8 +196,9 @@ void DeviceTable::add_action(std::vector<BLEDevice> &devices, std::string device
 """ + "\n".join(tracker_routes) + "\n                break; \n            }\n"
 
     # ==========================================
-    # 3. 生成 CT1, CT2, CT3
+    # 3. 生成 CT1, CT2, CT3 (采用你验证过的经典 V1 Web Server)
     # ==========================================
+    # 【核心修复】：完全采用你提供的成功配置结构！去掉 version: 2，加上 captive_portal
     base_common = """esphome:
   name: {name}
   friendly_name: {friendly_name}
@@ -218,13 +219,12 @@ wifi:
   fast_connect: true
   power_save_mode: none
   ap:
-    ssid: "CT Fallback"
+    ssid: "CT1 Fallback"
     password: "12345678"
+captive_portal:
+web_server:
 api:
   reboot_timeout: 0s
-web_server:
-  port: 80
-  version: 2
 ota:
   - platform: esphome
 external_components:
@@ -249,11 +249,11 @@ ble_gateway:
             f.write(content)
 
     write_yaml("ct1.yaml", base_common.format(name="ct1", friendly_name="CT1 BLE Gateway (Lite)"))
-    write_yaml("ct2.yaml", base_common.format(name="ct2", friendly_name="CT2 BLE Gateway (Full)") + "\nmqtt:\n  broker: \"192.168.6.88\"\n  discovery: true\nbluetooth_proxy:\n  active: false\n")
+    write_yaml("ct2.yaml", base_common.format(name="ct2", friendly_name="CT2 BLE Gateway (Full)") + "\nmqtt:\n  broker: \"192.168.6.88\"\n  discovery: true\n  on_message:\n    - topic: \"ct2/ble/send\"\n      then:\n        - lambda: |-\n            id(ct1_ble).send_hex(x);\nbluetooth_proxy:\n  active: false\n")
     write_yaml("ct3.yaml", base_common.format(name="ct3", friendly_name="CT3 BLE Gateway (Custom)"))
 
     # ==========================================
-    # 4. 生成 CT4 (修复缺少 external_components 的问题)
+    # 4. 生成 CT4 (同样采用经典 V1 Web Server)
     # ==========================================
     ct4_base = """esphome:
   name: ct4
@@ -280,12 +280,10 @@ wifi:
   fast_connect: true
   power_save_mode: none
   ap:
-    ssid: "CT Fallback"
+    ssid: "CT1 Fallback"
     password: "12345678"
 captive_portal:
 web_server:
-  port: 80
-  version: 2
 api:
   reboot_timeout: 0s
   on_client_connected:
@@ -325,13 +323,10 @@ output:
   - platform: gpio
     id: white_led_out
     pin: { number: GPIO26, inverted: true }
-
-# 【核心修复】：补全 external_components，让 ESPHome 能找到本地的 ble_gateway
 external_components:
   - source:
       type: local
       path: components
-
 ble_gateway:
   id: ct1_ble
 """
@@ -434,7 +429,7 @@ ble_gateway:
     with open(os.path.join(base_dir, "ct4.yaml"), 'w', encoding='utf-8') as f:
         f.write(ct4_content)
 
-    print(f"🎉 Successfully generated all files.")
+    print(f"🎉 Successfully generated all files with Classic V1 Web Server.")
 
 if __name__ == "__main__":
     base_dir = os.path.dirname(os.path.abspath(__file__))
