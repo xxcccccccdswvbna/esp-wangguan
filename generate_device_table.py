@@ -33,7 +33,7 @@ def generate_all(config_dir, base_dir):
     print(f"🚀 Generating code for {len(devices)} devices...")
 
     # ==========================================
-    # 1. 生成 C++ device_table.cpp
+    # 1. 生成 C++ device_table.cpp (所有版本共用)
     # ==========================================
     cpp_code = """#include "device_table.h"
 
@@ -81,13 +81,106 @@ void DeviceTable::add_action(std::vector<BLEDevice> &devices, std::string device
         f.write(cpp_code)
 
     # ==========================================
-    # 2. 生成完整的 ct1.yaml (包含三大件 + 你验证过的 OK 解析逻辑)
+    # 2. 准备动态生成的实体和 Tracker 部分 (所有版本共用)
+    # ==========================================
+    binary_sensors = []
+    sensors = []
+    text_sensors = []
+    lights_yaml = []
+    fans_yaml = []
+    tracker_routes = []
+
+    for dev in devices:
+        safe_id = dev['id'].replace('.', '_')
+        en_name = get_english_name(dev['id'])
+        
+        if 'mac' in dev and dev['mac']:
+            binary_sensors.append(f"  - platform: template\n    id: {safe_id}_led_state\n    name: \"{en_name} LED\"\n    device_class: light")
+            binary_sensors.append(f"  - platform: template\n    id: {safe_id}_fan_state\n    name: \"{en_name} Fan State\"\n    device_class: running")
+            sensors.append(f"  - platform: template\n    id: {safe_id}_brightness\n    name: \"{en_name} Brightness\"\n    unit_of_measurement: \"%\"\n    accuracy_decimals: 0")
+            sensors.append(f"  - platform: template\n    id: {safe_id}_color_temp\n    name: \"{en_name} Color Temp\"\n    unit_of_measurement: \"K\"\n    accuracy_decimals: 0")
+            sensors.append(f"  - platform: template\n    id: {safe_id}_fan_speed\n    name: \"{en_name} Fan Speed\"\n    accuracy_decimals: 0")
+            sensors.append(f"  - platform: template\n    id: {safe_id}_timer\n    name: \"{en_name} Timer\"\n    unit_of_measurement: \"min\"\n    accuracy_decimals: 0")
+            text_sensors.append(f"  - platform: template\n    id: {safe_id}_fan_direction\n    name: \"{en_name} Fan Direction\"")
+            
+            route_code = f"""
+                // 【Device: {en_name}】
+                if (mac == "{dev['mac'].lower()}") {{
+                    id({safe_id}_led_state).publish_state(led_on);
+                    id({safe_id}_brightness).publish_state(brightness_pct);
+                    id({safe_id}_color_temp).publish_state(color_kelvin);
+                    id({safe_id}_fan_state).publish_state(fan_on);
+                    id({safe_id}_fan_speed).publish_state(fan_speed);
+                    id({safe_id}_fan_direction).publish_state(fan_dir_str);
+                    id({safe_id}_timer).publish_state(timer_min);
+                }}"""
+            tracker_routes.append(route_code)
+
+        if 'light' in dev:
+            light_id = dev['light']['id']
+            lights_yaml.append(f"  - platform: ble_light\n    id: {safe_id}_light_ctrl\n    name: \"{en_name} Light\"\n    ble_device_id: \"{light_id}\"\n    gateway: ct1_ble")
+        if 'fan' in dev:
+            fan_id = dev['fan']['id']
+            fans_yaml.append(f"  - platform: ble_fan\n    id: {safe_id}_fan_ctrl\n    name: \"{en_name} Fan\"\n    ble_device_id: \"{fan_id}\"\n    gateway: ct1_ble")
+
+    dynamic_yaml = ""
+    if binary_sensors: dynamic_yaml += "binary_sensor:\n" + "\n".join(binary_sensors) + "\n\n"
+    if sensors: dynamic_yaml += "sensor:\n" + "\n".join(sensors) + "\n\n"
+    if text_sensors: dynamic_yaml += "text_sensor:\n" + "\n".join(text_sensors) + "\n\n"
+    if lights_yaml: dynamic_yaml += "light:\n" + "\n".join(lights_yaml) + "\n\n"
+    if fans_yaml: dynamic_yaml += "fan:\n" + "\n".join(fans_yaml) + "\n\n"
+    
+    if tracker_routes:
+        tracker_yaml = """esp32_ble_tracker:
+  scan_parameters:
+    interval: 320ms
+    window: 30ms
+    active: false
+  on_ble_advertise:
+    - then:
+        - lambda: |-
+            auto datas = x.get_manufacturer_datas();
+            for (auto &data : datas) {
+                std::string he = "";
+                for (uint8_t b : data.data) {
+                    char buf[3];
+                    sprintf(buf, "%02x", b);
+                    he += buf;
+                }
+                if (he.length() < 40) continue; 
+                if (he.substr(0, 4) != "8153") continue;
+
+                std::string mac_raw = he.substr(6, 12);
+                std::string mac = "";
+                for (int i = 10; i >= 0; i -= 2) {
+                    mac += mac_raw.substr(i, 2);
+                    if (i > 0) mac += ":";
+                }
+
+                int mode = strtol(he.substr(22, 2).c_str(), nullptr, 16);
+                bool led_on = (mode & 0x01) != 0;
+                bool fan_on = !(mode == 0x10 || mode == 0x11);
+                bool fan_reverse = (mode & 0x20) != 0;
+                
+                float brightness_pct = (strtol(he.substr(28, 2).c_str(), nullptr, 16) / 255.0f) * 100.0f;
+                float color_pct = strtol(he.substr(30, 2).c_str(), nullptr, 16) / 255.0f;
+                float color_kelvin = 2700.0f + (6500.0f - 2700.0f) * color_pct;
+                int timer_min = strtol(he.substr(32, 4).c_str(), nullptr, 16);
+                int fan_speed = fan_on ? (strtol(he.substr(36, 2).c_str(), nullptr, 16) + 1) : 0;
+                std::string fan_dir_str = fan_on ? (fan_reverse ? "Reverse" : "Forward") : "Off";
+"""
+        tracker_yaml += "\n".join(tracker_routes)
+        tracker_yaml += "\n                break; \n            }\n"
+        dynamic_yaml += tracker_yaml
+
+    # ==========================================
+    # 3. 生成 3 个不同版本的 YAML 文件 (强制全部包含 HTTP OTA)
     # ==========================================
     
-    # --- 基础配置 (加入 HTTP, MQTT, BT Proxy) ---
-    yaml_content = """esphome:
-  name: ct1
-  friendly_name: CT1 BLE Gateway
+    # 【核心修改】：将 web_server 和 ota 提取到 base_common，确保所有版本 100% 具备 HTTP 升级能力！
+    base_common = """esphome:
+  name: {name}
+  friendly_name: {friendly_name}
 
 esp32:
   board: esp32dev
@@ -108,33 +201,22 @@ wifi:
   fast_connect: true
   power_save_mode: none
   ap:
-    ssid: "CT1 Fallback"
+    ssid: "CT Fallback"
     password: "12345678"
-
-# 1. 开启 HTTP 网页服务 (用于本地 OTA 升级)
-web_server:
-  port: 80
-  version: 2
-
-# 2. 开启 MQTT
-mqtt:
-  broker: "192.168.6.88"
-  discovery: true
-  on_message:
-    - topic: "ct1/ble/send"
-      then:
-        - lambda: |-
-            id(ct1_ble).send_hex(x);
-
-# 3. 开启蓝牙代理 (被动模式，节省资源)
-bluetooth_proxy:
-  active: false
 
 api:
   reboot_timeout: 0s
 
+# ==========================================
+# 【强制核心配置】：确保所有版本都具备 HTTP 网页升级能力
+# ==========================================
+web_server:
+  port: 80
+  version: 2
+
 ota:
   - platform: esphome
+    # password: "your_ota_password" # 如需密码请取消注释，网页升级时需输入
 
 external_components:
   - source:
@@ -146,117 +228,44 @@ ble_gateway:
 
 """
 
-    # --- 动态生成实体 ---
-    binary_sensors = []
-    sensors = []
-    text_sensors = []
-    lights_yaml = []
-    fans_yaml = []
-    tracker_routes = []
+    # --- CT1: 精简保命版 (纯净，最稳定) ---
+    ct1_header = base_common.format(name="ct1", friendly_name="CT1 BLE Gateway (Lite)")
+    # ct1 不需要额外添加东西，直接使用 base_common
+    with open(os.path.join(base_dir, "ct1.yaml"), 'w', encoding='utf-8') as f:
+        f.write(ct1_header + dynamic_yaml)
 
-    for dev in devices:
-        safe_id = dev['id'].replace('.', '_')
-        en_name = get_english_name(dev['id'])
-        
-        # 规则 A: 有 MAC -> 生成状态传感器
-        if 'mac' in dev and dev['mac']:
-            binary_sensors.append(f"  - platform: template\n    id: {safe_id}_led_state\n    name: \"{en_name} LED\"\n    device_class: light")
-            binary_sensors.append(f"  - platform: template\n    id: {safe_id}_fan_state\n    name: \"{en_name} Fan State\"\n    device_class: running")
-            
-            sensors.append(f"  - platform: template\n    id: {safe_id}_brightness\n    name: \"{en_name} Brightness\"\n    unit_of_measurement: \"%\"\n    accuracy_decimals: 0")
-            sensors.append(f"  - platform: template\n    id: {safe_id}_color_temp\n    name: \"{en_name} Color Temp\"\n    unit_of_measurement: \"K\"\n    accuracy_decimals: 0")
-            sensors.append(f"  - platform: template\n    id: {safe_id}_fan_speed\n    name: \"{en_name} Fan Speed\"\n    accuracy_decimals: 0")
-            sensors.append(f"  - platform: template\n    id: {safe_id}_timer\n    name: \"{en_name} Timer\"\n    unit_of_measurement: \"min\"\n    accuracy_decimals: 0")
-            
-            text_sensors.append(f"  - platform: template\n    id: {safe_id}_fan_direction\n    name: \"{en_name} Fan Direction\"")
-            
-            # 动态生成路由判断 (完全保留你的字符串解析逻辑)
-            route_code = f"""
-                // 【Device: {en_name}】
-                if (mac == "{dev['mac'].lower()}") {{
-                    id({safe_id}_led_state).publish_state(led_on);
-                    id({safe_id}_brightness).publish_state(brightness_pct);
-                    id({safe_id}_color_temp).publish_state(color_kelvin);
-                    id({safe_id}_fan_state).publish_state(fan_on);
-                    id({safe_id}_fan_speed).publish_state(fan_speed);
-                    id({safe_id}_fan_direction).publish_state(fan_dir_str);
-                    id({safe_id}_timer).publish_state(timer_min);
-                }}"""
-            tracker_routes.append(route_code)
-
-        # 规则 B & C: 有 light/fan -> 生成控制实体
-        if 'light' in dev:
-            light_id = dev['light']['id']
-            lights_yaml.append(f"  - platform: ble_light\n    id: {safe_id}_light_ctrl\n    name: \"{en_name} Light\"\n    ble_device_id: \"{light_id}\"\n    gateway: ct1_ble")
-            
-        if 'fan' in dev:
-            fan_id = dev['fan']['id']
-            fans_yaml.append(f"  - platform: ble_fan\n    id: {safe_id}_fan_ctrl\n    name: \"{en_name} Fan\"\n    ble_device_id: \"{fan_id}\"\n    gateway: ct1_ble")
-
-    # 拼接 YAML
-    if binary_sensors: yaml_content += "binary_sensor:\n" + "\n".join(binary_sensors) + "\n\n"
-    if sensors: yaml_content += "sensor:\n" + "\n".join(sensors) + "\n\n"
-    if text_sensors: yaml_content += "text_sensor:\n" + "\n".join(text_sensors) + "\n\n"
-    if lights_yaml: yaml_content += "light:\n" + "\n".join(lights_yaml) + "\n\n"
-    if fans_yaml: yaml_content += "fan:\n" + "\n".join(fans_yaml) + "\n\n"
-    
-    # --- 核心：完全保留你验证过的 OK 的 BLE 字符串解析逻辑 ---
-    if tracker_routes:
-        tracker_yaml = """esp32_ble_tracker:
-  scan_parameters:
-    interval: 320ms
-    window: 30ms
-    active: false
-  on_ble_advertise:
-    - then:
+    # --- CT2: 全功能版 (包含 MQTT + 蓝牙代理) ---
+    ct2_header = base_common.format(name="ct2", friendly_name="CT2 BLE Gateway (Full)")
+    ct2_header += """
+# CT2 专属扩展功能
+mqtt:
+  broker: "192.168.6.88"
+  discovery: true
+  on_message:
+    - topic: "ct2/ble/send"
+      then:
         - lambda: |-
-            auto datas = x.get_manufacturer_datas();
-            for (auto &data : datas) {
-                std::string he = "";
-                for (uint8_t b : data.data) {
-                    char buf[3];
-                    sprintf(buf, "%02x", b);
-                    he += buf;
-                }
-                
-                if (he.length() < 40) continue; 
-                if (he.substr(0, 4) != "8153") continue;
+            id(ct1_ble).send_hex(x);
 
-                // 提取并反转 MAC 地址 (位置 6:18)
-                std::string mac_raw = he.substr(6, 12);
-                std::string mac = "";
-                for (int i = 10; i >= 0; i -= 2) {
-                    mac += mac_raw.substr(i, 2);
-                    if (i > 0) mac += ":";
-                }
-
-                // 解析通用状态数据
-                int mode = strtol(he.substr(22, 2).c_str(), nullptr, 16);
-                bool led_on = (mode & 0x01) != 0;
-                bool fan_on = !(mode == 0x10 || mode == 0x11);
-                bool fan_reverse = (mode & 0x20) != 0;
-                
-                float brightness_pct = (strtol(he.substr(28, 2).c_str(), nullptr, 16) / 255.0f) * 100.0f;
-                float color_pct = strtol(he.substr(30, 2).c_str(), nullptr, 16) / 255.0f;
-                float color_kelvin = 2700.0f + (6500.0f - 2700.0f) * color_pct;
-                
-                int timer_min = strtol(he.substr(32, 4).c_str(), nullptr, 16);
-                int fan_speed = fan_on ? (strtol(he.substr(36, 2).c_str(), nullptr, 16) + 1) : 0;
-                std::string fan_dir_str = fan_on ? (fan_reverse ? "Reverse" : "Forward") : "Off";
-
-                // === 根据 MAC 地址路由到对应的设备 ===
+bluetooth_proxy:
+  active: false
 """
-        tracker_yaml += "\n".join(tracker_routes)
-        tracker_yaml += "\n                \n                break; \n            }"
-        yaml_content += tracker_yaml
+    with open(os.path.join(base_dir, "ct2.yaml"), 'w', encoding='utf-8') as f:
+        f.write(ct2_header + dynamic_yaml)
 
-    # 写入 ct1.yaml
-    yaml_path = os.path.join(base_dir, "ct1.yaml")
-    with open(yaml_path, 'w', encoding='utf-8') as f:
-        f.write(yaml_content)
+    # --- CT3: 定制扩展版 (预留接口，同样带 HTTP 升级) ---
+    ct3_header = base_common.format(name="ct3", friendly_name="CT3 BLE Gateway (Custom)")
+    ct3_header += """
+# CT3 专属扩展功能 (示例：此处可添加你需要的特定组件，如 deep_sleep 等)
+# 注意：本版本同样保留了 web_server，确保可以通过 HTTP 升级！
+"""
+    with open(os.path.join(base_dir, "ct3.yaml"), 'w', encoding='utf-8') as f:
+        f.write(ct3_header + dynamic_yaml)
 
     print(f"🎉 Successfully generated: {cpp_path}")
-    print(f"🎉 Successfully generated: {yaml_path} (With Web, MQTT, BT Proxy & Verified Logic)")
+    print(f"🎉 Successfully generated: ct1.yaml (Lite + HTTP OTA)")
+    print(f"🎉 Successfully generated: ct2.yaml (Full + HTTP OTA)")
+    print(f"🎉 Successfully generated: ct3.yaml (Custom + HTTP OTA)")
 
 if __name__ == "__main__":
     base_dir = os.path.dirname(os.path.abspath(__file__))
