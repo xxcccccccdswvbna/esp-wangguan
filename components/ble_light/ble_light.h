@@ -15,19 +15,26 @@ public:
     void write_state(light::LightState *state) override;
 
 protected:
+    // 节流窗口 (与 BLEFan 对齐)
+    static constexpr uint32_t THROTTLE_MS = 500;
+
+    // 色温边界 (mireds)
+    static constexpr float MIREDS_MIN = 153.0f;  // 6500K
+    static constexpr float MIREDS_MAX = 370.0f;  // 2700K
+
     ble_gateway::BLEGateway *gateway_{nullptr};
     std::string device_id_;
 
-    // 映射算法
-    std::string map_brightness(float brightness);
-    std::string map_color_temp(float color_temp_mireds);
+    // 映射
+    static std::string map_brightness(float brightness);
+    static std::string map_color_temp(float mireds);
 
-    // 【新增】状态缓存与防抖变量
-    uint32_t last_send_time_{0};           // 上次发送 BLE 包的时间
-    std::string last_brightness_action_;   // 上次发送的亮度指令 (如 "brightness_50")
-    std::string last_color_temp_action_;   // 上次发送的色温指令 (如 "color_3500")
-    bool is_currently_on_{false};          // 当前记录的开关状态
+    // 状态缓存
+    uint32_t    last_send_time_{0};
+    std::string last_brightness_action_;
+    std::string last_color_temp_action_;
+    bool        is_currently_on_{false};
 };
 
-} // namespace ble_light
-} // namespace esphome
+}  // namespace ble_light
+}  // namespace esphome
