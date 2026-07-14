@@ -34,4 +34,4 @@ CONFIG_SCHEMA = (
     cv.Schema({
         cv.GenerateID():                 cv.declare_id(BLEFan),
         cv.Required(CONF_BLE_DEVICE_ID): cv.string,
-        cv.Required(CONF_GATEWAY):       
+        cv.Required(CONF_GATEWAY):       cv.use
