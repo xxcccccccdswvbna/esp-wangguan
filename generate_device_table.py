@@ -33,7 +33,7 @@ def generate_all(config_dir, base_dir):
     print(f"🚀 Generating code for {len(devices)} devices...")
 
     # ==========================================
-    # 1. 生成 C++ device_table.cpp (所有版本共用)
+    # 1. 生成 C++ device_table.cpp
     # ==========================================
     cpp_code = """#include "device_table.h"
 
@@ -81,7 +81,7 @@ void DeviceTable::add_action(std::vector<BLEDevice> &devices, std::string device
         f.write(cpp_code)
 
     # ==========================================
-    # 2. 准备动态生成的实体列表 (彻底解决 Duplicate key 问题)
+    # 2. 准备动态生成的实体列表
     # ==========================================
     binary_sensors = []
     sensors = []
@@ -91,7 +91,7 @@ void DeviceTable::add_action(std::vector<BLEDevice> &devices, std::string device
     fans_yaml = []
     tracker_routes = []
 
-    # 【核心修复】：直接将系统级监控传感器注入到列表中，不再使用独立的顶级 key 字符串块
+    # 注入系统级监控
     sensors.append("""  - platform: uptime
     name: "Gateway Uptime"
   - platform: internal_temperature
@@ -122,7 +122,6 @@ void DeviceTable::add_action(std::vector<BLEDevice> &devices, std::string device
     name: "Restart Gateway"
     icon: mdi:restart""")
 
-    # 遍历设备，注入设备级实体
     for dev in devices:
         safe_id = dev['id'].replace('.', '_')
         en_name = get_english_name(dev['id'])
@@ -197,9 +196,8 @@ void DeviceTable::add_action(std::vector<BLEDevice> &devices, std::string device
 """ + "\n".join(tracker_routes) + "\n                break; \n            }\n"
 
     # ==========================================
-    # 3. 生成 CT1, CT2, CT3 (基础版)
+    # 3. 生成 CT1, CT2, CT3
     # ==========================================
-    # 【核心修复】：ota 绝对不带 password，确保 web_server v2 前端 100% 显示 OTA 升级按钮！
     base_common = """esphome:
   name: {name}
   friendly_name: {friendly_name}
@@ -255,9 +253,9 @@ ble_gateway:
     write_yaml("ct3.yaml", base_common.format(name="ct3", friendly_name="CT3 BLE Gateway (Custom)"))
 
     # ==========================================
-    # 4. 生成 CT4 (Pro 专属版)
+    # 4. 生成 CT4 (修复 Duplicate key "light")
     # ==========================================
-    # 【核心修复】：删除了 ct4_base 中硬编码的 sensor 和 text_sensor，统一由列表生成，防止 CT4 也报 Duplicate key
+    # 【核心修复】：将 LED 的 light 配置从 ct4_base 中移出，放入列表中统一拼接
     ct4_base = """esphome:
   name: ct4
   friendly_name: CT4 BLE Gateway (Pro)
@@ -328,8 +326,12 @@ output:
   - platform: gpio
     id: white_led_out
     pin: { number: GPIO26, inverted: true }
-light:
-  - platform: binary
+ble_gateway:
+  id: ct1_ble
+"""
+
+    # 将 CT4 专属的 LED 灯配置放入列表
+    ct4_led_lights = ["""  - platform: binary
     name: Blue LED
     id: blue_led
     output: blue_led_out
@@ -338,10 +340,7 @@ light:
     name: White LED
     id: white_led
     output: white_led_out
-    restore_mode: RESTORE_DEFAULT_OFF
-ble_gateway:
-  id: ct1_ble
-"""
+    restore_mode: RESTORE_DEFAULT_OFF"""]
 
     keys_yaml = """
   - platform: gpio
@@ -409,7 +408,9 @@ ble_gateway:
         then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key4", mode: "single" } }]
 """
 
-    # 组装 CT4 YAML
+    # 组装 CT4 YAML (合并 LED 和 设备灯)
+    all_ct4_lights = ct4_led_lights + lights_yaml
+    
     ct4_content = ct4_base
     if binary_sensors: 
         ct4_content += "binary_sensor:\n" + "\n".join(binary_sensors) + keys_yaml + "\n\n"
@@ -419,15 +420,18 @@ ble_gateway:
     if sensors: ct4_content += "sensor:\n" + "\n".join(sensors) + "\n\n"
     if text_sensors: ct4_content += "text_sensor:\n" + "\n".join(text_sensors) + "\n\n"
     if buttons: ct4_content += "button:\n" + "\n".join(buttons) + "\n\n"
-    if lights_yaml: ct4_content += "light:\n" + "\n".join(lights_yaml) + "\n\n"
+    
+    # 【核心修复】：统一输出一个 light 键
+    if all_ct4_lights: 
+        ct4_content += "light:\n" + "\n".join(all_ct4_lights) + "\n\n"
+        
     if fans_yaml: ct4_content += "fan:\n" + "\n".join(fans_yaml) + "\n\n"
     ct4_content += dynamic_tracker
 
     with open(os.path.join(base_dir, "ct4.yaml"), 'w', encoding='utf-8') as f:
         f.write(ct4_content)
 
-    print(f"🎉 Successfully generated: {cpp_path}")
-    print(f"🎉 Successfully generated: ct1/2/3/4.yaml (Fixed Duplicate Key & HTTP OTA)")
+    print(f"🎉 Successfully generated all files.")
 
 if __name__ == "__main__":
     base_dir = os.path.dirname(os.path.abspath(__file__))
