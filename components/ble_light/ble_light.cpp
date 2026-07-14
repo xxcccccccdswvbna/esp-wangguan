@@ -28,16 +28,15 @@ void BLELight::write_state(light::LightState *state) {
     const float brightness = values.get_brightness();
     const float color_temp = values.get_color_temperature();
 
-    // 计算目标动作名
     const std::string target_bright_action = map_brightness(brightness);
     const std::string target_temp_action   = map_color_temp(color_temp);
 
-    // 去重: 开关状态一致时, 灯关着 或 亮度色温都没变 → 跳过
+    // 完全无变化直接跳过
     if (target_on == is_currently_on_) {
         if (!target_on ||
             (target_bright_action == last_brightness_action_ &&
              target_temp_action   == last_color_temp_action_)) {
-            ESP_LOGD(TAG, "State unchanged, skipping BLE send.");
+            ESP_LOGD(TAG, "State unchanged, skipping.");
             return;
         }
     }
@@ -49,20 +48,21 @@ void BLELight::write_state(light::LightState *state) {
         return;
     }
 
-    ESP_LOGI(TAG, "Received state: on=%d, bright=%.2f, temp=%.2f",
-             target_on, brightness, color_temp);
+    ESP_LOGI(TAG, "State: on=%d bright=%.2f temp=%.2f (was_on=%d)",
+             target_on, brightness, color_temp, is_currently_on_);
 
     if (!target_on) {
-        ESP_LOGI(TAG, "Sending: %s.off", device_id_.c_str());
+        // 关灯
         gateway_->send_command(device_id_, "off");
+    } else if (!is_currently_on_) {
+        // off → on: 只发 on, 保留灯自身记忆的亮度色温
+        gateway_->send_command(device_id_, "on");
     } else {
-        // 先发色温, 再发亮度
-        if (target_temp_action != last_color_temp_action_ || !is_currently_on_) {
-            ESP_LOGI(TAG, "Sending: %s.%s", device_id_.c_str(), target_temp_action.c_str());
+        // 已开着: 只发用户真正改变的量
+        if (target_temp_action != last_color_temp_action_) {
             gateway_->send_command(device_id_, target_temp_action);
         }
-        if (target_bright_action != last_brightness_action_ || !is_currently_on_) {
-            ESP_LOGI(TAG, "Sending: %s.%s", device_id_.c_str(), target_bright_action.c_str());
+        if (target_bright_action != last_brightness_action_) {
             gateway_->send_command(device_id_, target_bright_action);
         }
     }
