@@ -1,4 +1,4 @@
-name: Build and Release Firmware (Matrix)
+name: Build and Release All Firmware & Configs
 
 on:
   push:
@@ -10,76 +10,86 @@ permissions:
   contents: write
 
 jobs:
-  # Job 1: 统一运行 Python 脚本生成配置
-  generate-configs:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - name: Generate Configs
-        run: python3 generate_device_table.py
-      - name: Upload Configs Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: generated-configs
-          path: |
-            ct1.yaml
-            ct2.yaml
-            ct3.yaml
-            ct4.yaml
-            components/ble_gateway/device_table.cpp
-          retention-days: 1
-
-  # Job 2: 矩阵并行编译，独立发布
   build-and-release:
-    needs: generate-configs
     runs-on: ubuntu-latest
-    strategy:
-      # 【核心】：fail-fast 设为 false，一个版本失败不会取消其他版本的编译！
-      fail-fast: false 
-      matrix:
-        target: [ct1, ct2, ct3, ct4]
-        
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      
-      - name: Download Configs
-        uses: actions/download-artifact@v4
-        with:
-          name: generated-configs
+
+      # 【新增】获取当前时间，并设置为环境变量，供后续步骤使用
+      - name: Get current date and time
+        id: datetime
+        run: |
+          # 生成用于 Tag 的紧凑时间格式 (例如: 20231027_153045)
+          echo "TAG_TIME=$(date +'%Y%m%d_%H%M%S')" >> $GITHUB_ENV
+          # 生成用于标题的易读时间格式 (例如: 2023-10-27 15:30:45)
+          echo "TITLE_TIME=$(date +'%Y-%m-%d %H:%M:%S')" >> $GITHUB_ENV
+
+      - name: Generate Configs from JSON
+        run: python3 generate_device_table.py
 
       - name: Install ESPHome
-        run: pip install esphome
-
-      - name: Compile ${{ matrix.target }}
-        run: esphome compile ${{ matrix.target }}.yaml
-
-      - name: Collect Firmware for ${{ matrix.target }}
-        if: success() # 只有编译成功才收集
         run: |
-          mkdir -p firmware
-          cp .esphome/build/${{ matrix.target }}/.pioenvs/${{ matrix.target }}/firmware.bin firmware/${{ matrix.target }}_firmware.bin
-          cp .esphome/build/${{ matrix.target }}/.pioenvs/${{ matrix.target }}/firmware.factory.bin firmware/${{ matrix.target }}_firmware.factory.bin 2>/dev/null || true
-          cp ${{ matrix.target }}.yaml firmware/
-          cp components/ble_gateway/device_table.cpp firmware/${{ matrix.target }}_device_table.cpp 2>/dev/null || true
+          python -m pip install --upgrade pip
+          pip install esphome
 
-      - name: Create Release for ${{ matrix.target }}
-        if: success() # 只有编译成功才发布
+      - name: Compile CT1 (Lite)
+        run: esphome compile ct1.yaml
+
+      - name: Compile CT2 (Full)
+        run: esphome compile ct2.yaml
+
+      - name: Compile CT3 (Custom)
+        run: esphome compile ct3.yaml
+
+      - name: Compile CT4 (Pro)
+        run: esphome compile ct4.yaml
+
+      - name: Collect Firmware and Config Files
+        run: |
+          mkdir -p firmware/bin
+          mkdir -p firmware/configs
+          
+          # 收集固件
+          cp .esphome/build/ct1/.pioenvs/ct1/firmware.bin firmware/bin/ct1_firmware.bin
+          cp .esphome/build/ct1/.pioenvs/ct1/firmware.factory.bin firmware/bin/ct1_firmware.factory.bin 2>/dev/null || true
+          cp .esphome/build/ct2/.pioenvs/ct2/firmware.bin firmware/bin/ct2_firmware.bin
+          cp .esphome/build/ct2/.pioenvs/ct2/firmware.factory.bin firmware/bin/ct2_firmware.factory.bin 2>/dev/null || true
+          cp .esphome/build/ct3/.pioenvs/ct3/firmware.bin firmware/bin/ct3_firmware.bin
+          cp .esphome/build/ct3/.pioenvs/ct3/firmware.factory.bin firmware/bin/ct3_firmware.factory.bin 2>/dev/null || true
+          cp .esphome/build/ct4/.pioenvs/ct4/firmware.bin firmware/bin/ct4_firmware.bin
+          cp .esphome/build/ct4/.pioenvs/ct4/firmware.factory.bin firmware/bin/ct4_firmware.factory.bin 2>/dev/null || true
+
+          # 收集配置
+          cp ct1.yaml ct2.yaml ct3.yaml ct4.yaml firmware/configs/
+          cp components/ble_gateway/device_table.cpp firmware/configs/
+
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          # 每个版本独立 Tag，例如 ct1-v12, ct2-v12
-          tag_name: ${{ matrix.target }}-v${{ github.run_number }}
-          name: ${{ matrix.target }} Firmware Build #${{ github.run_number }}
+          # 【修改】Tag 名称加入紧凑时间，例如: v15-20231027_153045
+          tag_name: v${{ github.run_number }}-${{ env.TAG_TIME }}
+          
+          # 【修改】Release 标题加入易读时间，例如: CT Gateway Build #15 (2023-10-27 15:30:45)
+          name: CT Gateway Build #${{ github.run_number }} (${{ env.TITLE_TIME }})
+          
           body: |
-            🚀 ESP32 ${{ matrix.target }} 自动编译发布
-            Branch: `${{ github.ref_name }}`
-            Commit: `${{ github.sha }}`
+            🚀 ESP32 CT Gateway 自动编译发布
+            
+            **📦 包含内容：**
+            - **CT1 (Lite)**: 精简保命版，Web OTA 稳定。
+            - **CT2 (Full)**: 全功能版，含 MQTT/BT Proxy。
+            - **CT3 (Custom)**: 定制扩展版。
+            - **CT4 (Pro)**: 专属硬件版 (含物理按键/LED/系统传感器/Active BT Proxy)。
+            
+            > 💡 首次刷机请使用 `.factory.bin`。后续升级使用 `.bin` 进行 HTTP OTA。
           files: |
-            firmware/*
+            firmware/bin/*.bin
+            firmware/configs/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
