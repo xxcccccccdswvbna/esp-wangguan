@@ -4,7 +4,8 @@
   "mac": "00:00:70:2d:cf:f0", 
   
   "light": {
-    "id": "light.cw",    
+    "id": "light.cw",
+    "actions": {
       "on": [
         "0x0201021BFF114D1917F0CF2D70000001CECF9B2D2D7070005CBF1D60F0F0F4",
         "0x0201021BFF114D191AF0CF2D700000012C2D7070005CBF1D60F0F0FC3FCFCD"
