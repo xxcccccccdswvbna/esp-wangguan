@@ -2,6 +2,7 @@
   "id": "device.ct1",
   "name": "餐厅风扇灯",
   "mac": "00:00:70:27:80:48", 
+  "protocol": "134D",
   
   "light": {
     "id": "light.ct2",
