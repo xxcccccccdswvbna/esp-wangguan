@@ -5,20 +5,16 @@ from esphome.const import CONF_ID, CONF_RESTORE_MODE
 
 DEPENDENCIES = ["ble_gateway"]
 
-# --- Namespaces ---
 ble_fan_ns     = cg.esphome_ns.namespace("ble_fan")
 ble_gateway_ns = cg.esphome_ns.namespace("ble_gateway")
 fan_ns         = cg.esphome_ns.namespace("fan")
 
-# --- Class handles (与 C++ 端一致: BLEFan 同时继承 Component 和 fan::Fan) ---
 BLEFan     = ble_fan_ns.class_("BLEFan", cg.Component, fan.Fan)
 BLEGateway = ble_gateway_ns.class_("BLEGateway", cg.Component)
 
-# --- Config keys ---
 CONF_BLE_DEVICE_ID = "ble_device_id"
 CONF_GATEWAY       = "gateway"
 
-# --- Restore mode enum ---
 FanRestoreMode = fan_ns.namespace("FanRestoreMode")
 RESTORE_MODES = {
     "NO_RESTORE":                   FanRestoreMode.NO_RESTORE,
@@ -30,8 +26,8 @@ RESTORE_MODES = {
     "ALWAYS_ON":                    FanRestoreMode.ALWAYS_ON,
 }
 
-CONFIG_SCHEMA = (
-    cv.Schema({
-        cv.GenerateID():                 cv.declare_id(BLEFan),
-        cv.Required(CONF_BLE_DEVICE_ID): cv.string,
-        cv.Required(CONF_GATEWAY):       cv.use_id
+CONFIG_SCHEMA = cv.Schema({
+    cv.GenerateID(): cv.declare_id(BLEFan),
+    cv.Required(CONF_BLE_DEVICE_ID): cv.string,
+    cv.Required(CONF_GATEWAY): cv.use_id(BLEGateway),
+    cv.Optional(CONF_RESTORE_MODE, default="R
