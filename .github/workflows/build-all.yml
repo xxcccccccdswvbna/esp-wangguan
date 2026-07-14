@@ -3,7 +3,7 @@ name: Build and Release Firmware (Matrix Parallel)
 on:
   push:
     branches:
-      - CT1-V2.1
+      - cloud4
   workflow_dispatch:
 
 permissions:
@@ -13,29 +13,47 @@ jobs:
   build-and-release:
     runs-on: ubuntu-latest
     strategy:
-      # 【核心 1】：fail-fast 设为 false，确保一个版本编译失败，绝对不会取消其他版本的编译！
-      fail-fast: false 
+      fail-fast: false
       matrix:
-        # 【核心 2】：定义要并行编译的 4 个目标
         target: [ct1, ct2, ct3, ct4]
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          # 需要 2 个 commit 才能 diff, 拉全量历史给 log 用
+          fetch-depth: 0
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      # 获取当前时间
-      - name: Get current date and time
-        id: datetime
+      # ------------------------------------------------------------------
+      # 时间戳 + git 元数据 (供文件名和 release body 使用)
+      # ------------------------------------------------------------------
+      - name: Collect build metadata
+        id: meta
         run: |
-          echo "TAG_TIME=$(date +'%Y%m%d_%H%M%S')" >> $GITHUB_ENV
-          echo "TITLE_TIME=$(date +'%Y-%m-%d %H:%M:%S')" >> $GITHUB_ENV
+          echo "TAG_TIME=$(date +'%Y%m%d_%H%M%S')"        >> $GITHUB_ENV
+          echo "TITLE_TIME=$(date +'%Y-%m-%d %H:%M:%S')"  >> $GITHUB_ENV
+          echo "SHORT_SHA=$(git rev-parse --short HEAD)"  >> $GITHUB_ENV
 
-      # 运行 Python 脚本生成所有配置（每个并行任务都会跑一遍，速度很快）
+          # 最近一次提交
+          {
+            echo 'COMMIT_MSG<<__EOF__'
+            git log -1 --pretty=format:'%s%n%n%b'
+            echo
+            echo '__EOF__'
+          } >> $GITHUB_ENV
+
+          # 本次 push 涉及的文件 (相对上一个 commit)
+          {
+            echo 'CHANGED_FILES<<__EOF__'
+            git diff --name-status HEAD~1 HEAD 2>/dev/null || echo "(initial commit)"
+            echo '__EOF__'
+          } >> $GITHUB_ENV
+
       - name: Generate Configs from JSON
         run: python3 generate_device_table.py
 
@@ -44,43 +62,93 @@ jobs:
           python -m pip install --upgrade pip
           pip install esphome
 
-      # 【核心 3】：只编译当前矩阵任务对应的目标 (例如当前任务是 ct1，就只编译 ct1.yaml)
       - name: Compile ${{ matrix.target }}
         run: esphome compile ${{ matrix.target }}.yaml
 
-      # 收集固件（只有编译成功才执行）
+      # ------------------------------------------------------------------
+      # 收集产物: 文件名带 target + 时间戳 + 短 SHA
+      # ------------------------------------------------------------------
       - name: Collect Firmware for ${{ matrix.target }}
-        if: success() 
+        if: success()
         run: |
-          mkdir -p firmware
-          # 收集当前目标的固件
-          cp .esphome/build/${{ matrix.target }}/.pioenvs/${{ matrix.target }}/firmware.bin firmware/${{ matrix.target }}_firmware.bin
-          cp .esphome/build/${{ matrix.target }}/.pioenvs/${{ matrix.target }}/firmware.factory.bin firmware/${{ matrix.target }}_firmware.factory.bin 2>/dev/null || true
-          # 收集当前目标的配置文件
-          cp ${{ matrix.target }}.yaml firmware/
-          # C++ 文件是共用的，也收集一下
-          cp components/ble_gateway/device_table.cpp firmware/${{ matrix.target }}_device_table.cpp 2>/dev/null || true
+          T=${{ matrix.target }}
+          STAMP=${TAG_TIME}_${SHORT_SHA}
+          SRC=".esphome/build/$T/.pioenvs/$T"
+          OUT="firmware"
+          mkdir -p "$OUT"
 
-      # 发布 Release（只有编译成功才执行，且每个目标独立发布）
-      - name: Create Release for ${{ matrix.target }}
-        if: success() 
+          cp "$SRC/firmware.bin"         "$OUT/${T}_${STAMP}.bin"
+          if [ -f "$SRC/firmware.factory.bin" ]; then
+            cp "$SRC/firmware.factory.bin" "$OUT/${T}_${STAMP}.factory.bin"
+          fi
+          cp "$T.yaml"                              "$OUT/${T}_${STAMP}.yaml"
+          if [ -f components/ble_gateway/device_table.cpp ]; then
+            cp components/ble_gateway/device_table.cpp \
+               "$OUT/${T}_${STAMP}_device_table.cpp"
+          fi
+
+          echo "==== Collected artifacts ===="
+          ls -lh "$OUT"
+
+      # ------------------------------------------------------------------
+      # 版本化 Release: <target>-v<run>-<time>-<sha>
+      # ------------------------------------------------------------------
+      - name: Create versioned Release for ${{ matrix.target }}
+        if: success()
         uses: softprops/action-gh-release@v2
         with:
-          # 每个目标独立 Tag，例如: ct1-v15-20231027_153045
-          tag_name: ${{ matrix.target }}-v${{ github.run_number }}-${{ env.TAG_TIME }}
-          # 每个目标独立标题，例如: ct1 Firmware Build #15 (2023-10-27 15:30:45)
-          name: ${{ matrix.target }} Firmware Build #${{ github.run_number }} (${{ env.TITLE_TIME }})
+          tag_name: ${{ matrix.target }}-v${{ github.run_number }}-${{ env.TAG_TIME }}-${{ env.SHORT_SHA }}
+          name: "${{ matrix.target }} #${{ github.run_number }} · ${{ env.TITLE_TIME }} · ${{ env.SHORT_SHA }}"
           body: |
-            🚀 ESP32 ${{ matrix.target }} 自动编译发布
-            
-            **📦 包含内容：**
-            - `${{ matrix.target }}_firmware.bin` (HTTP OTA 升级用)
-            - `${{ matrix.target }}_firmware.factory.bin` (首次 USB 刷机用)
-            - `${{ matrix.target }}.yaml` (当前版本的配置文件)
-            - `${{ matrix.target }}_device_table.cpp` (底层 C++ 指令表)
-            
-            > 💡 首次刷机请使用 `.factory.bin`。后续升级使用 `.bin` 进行 HTTP OTA。
-          files: |
-            firmware/*
+            🚀 **${{ matrix.target }}** · Build #${{ github.run_number }}
+
+            **🕒 编译时间**: ${{ env.TITLE_TIME }}
+            **🔖 Commit**: [`${{ env.SHORT_SHA }}`](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})
+            **🌿 分支**: `${{ github.ref_name }}`
+
+            ---
+
+            **📝 本次提交**
+            ```
+            ${{ env.COMMIT_MSG }}
+            ```
+
+            **📂 触发本次编译的文件变更**
+            ```
+            ${{ env.CHANGED_FILES }}
+            ```
+
+            ---
+
+            **📦 产物 (文件名已含时间戳 `${{ env.TAG_TIME }}_${{ env.SHORT_SHA }}`)**
+            - `${{ matrix.target }}_${{ env.TAG_TIME }}_${{ env.SHORT_SHA }}.factory.bin` — 首次 USB 刷机
+            - `${{ matrix.target }}_${{ env.TAG_TIME }}_${{ env.SHORT_SHA }}.bin` — HTTP OTA 升级
+            - `${{ matrix.target }}_${{ env.TAG_TIME }}_${{ env.SHORT_SHA }}.yaml` — 本次编译使用的配置
+            - `${{ matrix.target }}_${{ env.TAG_TIME }}_${{ env.SHORT_SHA }}_device_table.cpp` — 底层指令表
+
+            > 💡 想拿最新版可直接访问 [`${{ matrix.target }}-latest`](${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ matrix.target }}-latest)
+          files: firmware/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ------------------------------------------------------------------
+      # 滚动 "latest" Release: 每个 target 一个固定入口
+      # ------------------------------------------------------------------
+      - name: Update rolling "latest" Release for ${{ matrix.target }}
+        if: success()
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ matrix.target }}-latest
+          name: "${{ matrix.target }} · latest (${{ env.TITLE_TIME }})"
+          body: |
+            **${{ matrix.target }} 最新构建** — 由 workflow 自动覆盖
+
+            - 编译时间: ${{ env.TITLE_TIME }}
+            - Commit: `${{ env.SHORT_SHA }}`
+            - Run: #${{ github.run_number }}
+            - 详细版本: [${{ matrix.target }}-v${{ github.run_number }}-${{ env.TAG_TIME }}-${{ env.SHORT_SHA }}](${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ matrix.target }}-v${{ github.run_number }}-${{ env.TAG_TIME }}-${{ env.SHORT_SHA }})
+          files: firmware/*
+          # 关键: 覆盖同名 tag, 让 "latest" 永远指向最新
+          make_latest: "false"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
