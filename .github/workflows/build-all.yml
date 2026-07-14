@@ -1,0 +1,109 @@
+name: Build and Release All Firmware & Configs
+
+on:
+  push:
+    branches:
+      - CT1-V2.1
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      # 1. 拉取代码
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. 安装 Python
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # 3. 运行 Python 脚本，自动生成 3 个 YAML 和 1 个 C++ 文件
+      - name: Generate Configs from JSON
+        run: python3 generate_device_table.py
+
+      # 4. 安装 ESPHome
+      - name: Install ESPHome
+        run: |
+          python -m pip install --upgrade pip
+          pip install esphome
+
+      # 5. 编译 CT1 (精简版)
+      - name: Compile CT1 (Lite)
+        run: esphome compile ct1.yaml
+
+      # 6. 编译 CT2 (全功能版)
+      - name: Compile CT2 (Full)
+        run: esphome compile ct2.yaml
+
+      # 7. 编译 CT3 (定制版)
+      - name: Compile CT3 (Custom)
+        run: esphome compile ct3.yaml
+
+      # 8. 收集固件 和 生成的配置文件 (分类存放)
+      - name: Collect Firmware and Config Files
+        run: |
+          # 创建分类目录
+          mkdir -p firmware/bin
+          mkdir -p firmware/configs
+          
+          # --- 收集 CT1 固件 ---
+          cp .esphome/build/ct1/.pioenvs/ct1/firmware.bin firmware/bin/ct1_firmware.bin
+          cp .esphome/build/ct1/.pioenvs/ct1/firmware.factory.bin firmware/bin/ct1_firmware.factory.bin 2>/dev/null || true
+          
+          # --- 收集 CT2 固件 ---
+          cp .esphome/build/ct2/.pioenvs/ct2/firmware.bin firmware/bin/ct2_firmware.bin
+          cp .esphome/build/ct2/.pioenvs/ct2/firmware.factory.bin firmware/bin/ct2_firmware.factory.bin 2>/dev/null || true
+          
+          # --- 收集 CT3 固件 ---
+          cp .esphome/build/ct3/.pioenvs/ct3/firmware.bin firmware/bin/ct3_firmware.bin
+          cp .esphome/build/ct3/.pioenvs/ct3/firmware.factory.bin firmware/bin/ct3_firmware.factory.bin 2>/dev/null || true
+
+          # --- 收集生成的配置文件和 C++ 源码 ---
+          cp ct1.yaml firmware/configs/
+          cp ct2.yaml firmware/configs/
+          cp ct3.yaml firmware/configs/
+          cp components/ble_gateway/device_table.cpp firmware/configs/
+
+          echo "===== 收集到的固件 (bin) ====="
+          ls -lh firmware/bin/
+          echo "===== 收集到的配置和源码 (configs) ====="
+          ls -lh firmware/configs/
+
+      # 9. 发布到 GitHub Release (同时上传 bin 和 configs)
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ github.run_number }}
+          name: CT Gateway Build #${{ github.run_number }}
+          body: |
+            🚀 ESP32 CT Gateway 自动编译发布
+            
+            **📦 包含内容：**
+            1. **固件 (bin 文件夹内)**:
+               - `ct1_firmware.bin` / `.factory.bin` (精简保命版，Web OTA 稳定)
+               - `ct2_firmware.bin` / `.factory.bin` (全功能版，含 MQTT/BT Proxy)
+               - `ct3_firmware.bin` / `.factory.bin` (定制扩展版)
+            2. **配置与源码 (configs 文件夹内)**:
+               - `ct1.yaml`, `ct2.yaml`, `ct3.yaml` (自动生成的完整配置)
+               - `device_table.cpp` (自动生成的底层 C++ 指令表)
+            
+            **🛠️ 使用提示：**
+            - 首次刷机请使用 `.factory.bin` 通过 USB 刷入。
+            - 后续升级可直接在 Web 界面使用 `.bin` 文件 OTA。
+            - 如需本地测试，可下载 `configs` 文件夹内的文件覆盖到本地项目。
+            
+            **ℹ️ 构建信息:**
+            - Branch: `${{ github.ref_name }}`
+            - Commit: `${{ github.sha }}`
+          # 👇 关键修改：同时上传 bin 目录和 configs 目录下的所有文件
+          files: |
+            firmware/bin/*.bin
+            firmware/configs/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
