@@ -14,17 +14,15 @@ BLEGateway = gw_ns.class_("BLEGateway", cg.Component)
 CONF_BLE_DEVICE_ID = "ble_device_id"
 CONF_GATEWAY = "gateway"
 
-CONFIG_SCHEMA = cv.Schema({
-    cv.GenerateID(): cv.declare_id(BLEFan),
+CONFIG_SCHEMA = fan.fan_schema(BLEFan).extend({
     cv.Required(CONF_BLE_DEVICE_ID): cv.string,
     cv.Required(CONF_GATEWAY): cv.use_id(BLEGateway),
-}).extend(cv.COMPONENT_SCHEMA).extend(fan.FAN_SCHEMA)
+}).extend(cv.COMPONENT_SCHEMA)
 
 
 async def to_code(config):
-    var = cg.new_Pvariable(config[CONF_ID])
+    var = await fan.new_fan(config)
     await cg.register_component(var, config)
-    await fan.register_fan(var, config)
     gw = await cg.get_variable(config[CONF_GATEWAY])
     cg.add(var.set_gateway(gw))
     cg.add(var.set_device_id(config[CONF_BLE_DEVICE_ID]))
