@@ -81,15 +81,48 @@ void DeviceTable::add_action(std::vector<BLEDevice> &devices, std::string device
         f.write(cpp_code)
 
     # ==========================================
-    # 2. 准备动态生成的实体和 Tracker 部分
+    # 2. 准备动态生成的实体列表 (彻底解决 Duplicate key 问题)
     # ==========================================
     binary_sensors = []
     sensors = []
     text_sensors = []
+    buttons = []
     lights_yaml = []
     fans_yaml = []
     tracker_routes = []
 
+    # 【核心修复】：直接将系统级监控传感器注入到列表中，不再使用独立的顶级 key 字符串块
+    sensors.append("""  - platform: uptime
+    name: "Gateway Uptime"
+  - platform: internal_temperature
+    name: "ESP32 Chip Temperature"
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+  - platform: wifi_signal
+    name: "WiFi Signal dBm"
+    id: wifi_signal_db
+    update_interval: 60s
+  - platform: copy
+    source_id: wifi_signal_db
+    name: "WiFi Signal Percent"
+    filters:
+      - lambda: return min(max(2 * (x + 100.0), 0.0), 100.0);
+    unit_of_measurement: "%"
+    icon: mdi:wifi-strength-4""")
+
+    text_sensors.append("""  - platform: wifi_info
+    ip_address:
+      name: "ESP IP Address"
+    ssid:
+      name: "ESP Connected SSID"
+    bssid:
+      name: "ESP Connected BSSID\"""")
+
+    buttons.append("""  - platform: restart
+    name: "Restart Gateway"
+    icon: mdi:restart""")
+
+    # 遍历设备，注入设备级实体
     for dev in devices:
         safe_id = dev['id'].replace('.', '_')
         en_name = get_english_name(dev['id'])
@@ -164,48 +197,9 @@ void DeviceTable::add_action(std::vector<BLEDevice> &devices, std::string device
 """ + "\n".join(tracker_routes) + "\n                break; \n            }\n"
 
     # ==========================================
-    # 3. 提取公共模块：系统监控传感器 + 重启按钮
+    # 3. 生成 CT1, CT2, CT3 (基础版)
     # ==========================================
-    system_extras = """
-# ================= 系统状态监控与重启 =================
-sensor:
-  - platform: uptime
-    name: "Gateway Uptime"
-  - platform: internal_temperature
-    name: "ESP32 Chip Temperature"
-    unit_of_measurement: "°C"
-    accuracy_decimals: 1
-  - platform: wifi_signal
-    name: "WiFi Signal dBm"
-    id: wifi_signal_db
-    update_interval: 60s
-  - platform: copy
-    source_id: wifi_signal_db
-    name: "WiFi Signal Percent"
-    filters:
-      - lambda: return min(max(2 * (x + 100.0), 0.0), 100.0);
-    unit_of_measurement: "%"
-    icon: mdi:wifi-strength-4
-
-text_sensor:
-  - platform: wifi_info
-    ip_address:
-      name: "ESP IP Address"
-    ssid:
-      name: "ESP Connected SSID"
-    bssid:
-      name: "ESP Connected BSSID"
-
-button:
-  - platform: restart
-    name: "Restart Gateway"
-    icon: mdi:restart
-"""
-
-    # ==========================================
-    # 4. 生成 CT1, CT2, CT3 (基础版，强制带 HTTP OTA 和系统监控)
-    # ==========================================
-    # 【核心修复】：移除 ota 的 password，确保 web_server v2 前端 100% 显示 OTA 升级按钮！
+    # 【核心修复】：ota 绝对不带 password，确保 web_server v2 前端 100% 显示 OTA 升级按钮！
     base_common = """esphome:
   name: {name}
   friendly_name: {friendly_name}
@@ -230,15 +224,11 @@ wifi:
     password: "12345678"
 api:
   reboot_timeout: 0s
-
-# 【HTTP 网页与 OTA 升级核心配置】
 web_server:
   port: 80
   version: 2
 ota:
   - platform: esphome
-    # 注意：此处故意不设置 password，以确保 web_server v2 前端能正常渲染 OTA 上传入口！
-
 external_components:
   - source:
       type: local
@@ -248,10 +238,11 @@ ble_gateway:
 """
     
     def write_yaml(filename, header, extra=""):
-        content = header + system_extras + "\n"
+        content = header
         if binary_sensors: content += "binary_sensor:\n" + "\n".join(binary_sensors) + "\n\n"
         if sensors: content += "sensor:\n" + "\n".join(sensors) + "\n\n"
         if text_sensors: content += "text_sensor:\n" + "\n".join(text_sensors) + "\n\n"
+        if buttons: content += "button:\n" + "\n".join(buttons) + "\n\n"
         if lights_yaml: content += "light:\n" + "\n".join(lights_yaml) + "\n\n"
         if fans_yaml: content += "fan:\n" + "\n".join(fans_yaml) + "\n\n"
         content += extra
@@ -264,8 +255,9 @@ ble_gateway:
     write_yaml("ct3.yaml", base_common.format(name="ct3", friendly_name="CT3 BLE Gateway (Custom)"))
 
     # ==========================================
-    # 5. 生成 CT4 (Pro 专属版：按键 + LED + 蓝牙代理 + 系统监控)
+    # 4. 生成 CT4 (Pro 专属版)
     # ==========================================
+    # 【核心修复】：删除了 ct4_base 中硬编码的 sensor 和 text_sensor，统一由列表生成，防止 CT4 也报 Duplicate key
     ct4_base = """esphome:
   name: ct4
   friendly_name: CT4 BLE Gateway (Pro)
@@ -351,9 +343,7 @@ ble_gateway:
   id: ct1_ble
 """
 
-    # 物理按键配置
     keys_yaml = """
-  # KEY1 GPIO34 (长按8s + KEY4 恢复出厂)
   - platform: gpio
     id: key1
     name: KEY1
@@ -370,7 +360,6 @@ ble_gateway:
       - timing: [ON for at most 0.5s, OFF for at least 0.3s]
         then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key1", mode: "single" } }]
 
-  # KEY2 GPIO35 (连按5次安全模式重启)
   - platform: gpio
     id: key2
     name: KEY2
@@ -393,7 +382,6 @@ ble_gateway:
               then: [lambda: 'id(safe_mode_tap_count) = 0;', repeat: { count: 8, then: [light.toggle: blue_led, delay: 150ms] }, lambda: 'App.safe_reboot();']
               else: [delay: 5000ms, lambda: 'id(safe_mode_tap_count) = 0;']
 
-  # KEY3 GPIO32
   - platform: gpio
     id: key3
     name: KEY3
@@ -407,7 +395,6 @@ ble_gateway:
       - timing: [ON for at most 0.5s, OFF for at least 0.3s]
         then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key3", mode: "single" } }]
 
-  # KEY4 GPIO33
   - platform: gpio
     id: key4
     name: KEY4
@@ -423,7 +410,7 @@ ble_gateway:
 """
 
     # 组装 CT4 YAML
-    ct4_content = ct4_base + system_extras + "\n"
+    ct4_content = ct4_base
     if binary_sensors: 
         ct4_content += "binary_sensor:\n" + "\n".join(binary_sensors) + keys_yaml + "\n\n"
     else:
@@ -431,6 +418,7 @@ ble_gateway:
         
     if sensors: ct4_content += "sensor:\n" + "\n".join(sensors) + "\n\n"
     if text_sensors: ct4_content += "text_sensor:\n" + "\n".join(text_sensors) + "\n\n"
+    if buttons: ct4_content += "button:\n" + "\n".join(buttons) + "\n\n"
     if lights_yaml: ct4_content += "light:\n" + "\n".join(lights_yaml) + "\n\n"
     if fans_yaml: ct4_content += "fan:\n" + "\n".join(fans_yaml) + "\n\n"
     ct4_content += dynamic_tracker
@@ -439,7 +427,7 @@ ble_gateway:
         f.write(ct4_content)
 
     print(f"🎉 Successfully generated: {cpp_path}")
-    print(f"🎉 Successfully generated: ct1/2/3/4.yaml (All with System Monitors, Restart Button & Fixed HTTP OTA)")
+    print(f"🎉 Successfully generated: ct1/2/3/4.yaml (Fixed Duplicate Key & HTTP OTA)")
 
 if __name__ == "__main__":
     base_dir = os.path.dirname(os.path.abspath(__file__))
