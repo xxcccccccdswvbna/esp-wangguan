@@ -25,7 +25,7 @@ protected:
     ble_gateway::BLEGateway *gateway_{nullptr};
     std::string device_id_;
 
-    // 映射
+    // 档位映射
     static std::string map_brightness(float brightness);
     static std::string map_color_temp(float mireds);
 
