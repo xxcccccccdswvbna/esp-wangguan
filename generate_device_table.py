@@ -253,9 +253,8 @@ ble_gateway:
     write_yaml("ct3.yaml", base_common.format(name="ct3", friendly_name="CT3 BLE Gateway (Custom)"))
 
     # ==========================================
-    # 4. 生成 CT4 (修复 Duplicate key "light")
+    # 4. 生成 CT4 (修复缺少 external_components 的问题)
     # ==========================================
-    # 【核心修复】：将 LED 的 light 配置从 ct4_base 中移出，放入列表中统一拼接
     ct4_base = """esphome:
   name: ct4
   friendly_name: CT4 BLE Gateway (Pro)
@@ -326,11 +325,17 @@ output:
   - platform: gpio
     id: white_led_out
     pin: { number: GPIO26, inverted: true }
+
+# 【核心修复】：补全 external_components，让 ESPHome 能找到本地的 ble_gateway
+external_components:
+  - source:
+      type: local
+      path: components
+
 ble_gateway:
   id: ct1_ble
 """
 
-    # 将 CT4 专属的 LED 灯配置放入列表
     ct4_led_lights = ["""  - platform: binary
     name: Blue LED
     id: blue_led
@@ -408,7 +413,6 @@ ble_gateway:
         then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key4", mode: "single" } }]
 """
 
-    # 组装 CT4 YAML (合并 LED 和 设备灯)
     all_ct4_lights = ct4_led_lights + lights_yaml
     
     ct4_content = ct4_base
@@ -421,7 +425,6 @@ ble_gateway:
     if text_sensors: ct4_content += "text_sensor:\n" + "\n".join(text_sensors) + "\n\n"
     if buttons: ct4_content += "button:\n" + "\n".join(buttons) + "\n\n"
     
-    # 【核心修复】：统一输出一个 light 键
     if all_ct4_lights: 
         ct4_content += "light:\n" + "\n".join(all_ct4_lights) + "\n\n"
         
