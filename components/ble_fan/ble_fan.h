@@ -7,10 +7,8 @@
 namespace esphome {
 namespace ble_fan {
 
-// 【关键】同时继承 fan::Fan 和 Component
 class BLEFan : public fan::Fan, public Component {
 public:
-    // 【关键】实现 Component 的虚函数，保证内存布局完整，防止运行时崩溃
     void setup() override;
     void loop() override;
 
@@ -21,14 +19,18 @@ public:
     void control(const fan::FanCall &call) override;
 
 protected:
+    // 与 BLELight 对齐的节流窗口
+    static constexpr uint32_t THROTTLE_MS = 500;
+
     ble_gateway::BLEGateway *gateway_{nullptr};
     std::string device_id_;
 
-    uint32_t last_send_time_{0};
-    bool last_state_{false};
-    int last_speed_{0};
+    // 状态缓存 (用于去重)
+    uint32_t          last_send_time_{0};
+    bool              last_state_{false};
+    int               last_speed_{0};
     fan::FanDirection last_direction_{fan::FanDirection::FORWARD};
 };
 
-} // namespace ble_fan
-} // namespace esphome
+}  // namespace ble_fan
+}  // namespace esphome
