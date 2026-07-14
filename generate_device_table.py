@@ -81,7 +81,7 @@ void DeviceTable::add_action(std::vector<BLEDevice> &devices, std::string device
         f.write(cpp_code)
 
     # ==========================================
-    # 2. 准备动态生成的实体和 Tracker 部分 (所有版本共用)
+    # 2. 准备动态生成的实体和 Tracker 部分
     # ==========================================
     binary_sensors = []
     sensors = []
@@ -104,7 +104,6 @@ void DeviceTable::add_action(std::vector<BLEDevice> &devices, std::string device
             text_sensors.append(f"  - platform: template\n    id: {safe_id}_fan_direction\n    name: \"{en_name} Fan Direction\"")
             
             route_code = f"""
-                // 【Device: {en_name}】
                 if (mac == "{dev['mac'].lower()}") {{
                     id({safe_id}_led_state).publish_state(led_on);
                     id({safe_id}_brightness).publish_state(brightness_pct);
@@ -123,15 +122,9 @@ void DeviceTable::add_action(std::vector<BLEDevice> &devices, std::string device
             fan_id = dev['fan']['id']
             fans_yaml.append(f"  - platform: ble_fan\n    id: {safe_id}_fan_ctrl\n    name: \"{en_name} Fan\"\n    ble_device_id: \"{fan_id}\"\n    gateway: ct1_ble")
 
-    dynamic_yaml = ""
-    if binary_sensors: dynamic_yaml += "binary_sensor:\n" + "\n".join(binary_sensors) + "\n\n"
-    if sensors: dynamic_yaml += "sensor:\n" + "\n".join(sensors) + "\n\n"
-    if text_sensors: dynamic_yaml += "text_sensor:\n" + "\n".join(text_sensors) + "\n\n"
-    if lights_yaml: dynamic_yaml += "light:\n" + "\n".join(lights_yaml) + "\n\n"
-    if fans_yaml: dynamic_yaml += "fan:\n" + "\n".join(fans_yaml) + "\n\n"
-    
+    dynamic_tracker = ""
     if tracker_routes:
-        tracker_yaml = """esp32_ble_tracker:
+        dynamic_tracker = """esp32_ble_tracker:
   scan_parameters:
     interval: 320ms
     window: 30ms
@@ -168,20 +161,54 @@ void DeviceTable::add_action(std::vector<BLEDevice> &devices, std::string device
                 int timer_min = strtol(he.substr(32, 4).c_str(), nullptr, 16);
                 int fan_speed = fan_on ? (strtol(he.substr(36, 2).c_str(), nullptr, 16) + 1) : 0;
                 std::string fan_dir_str = fan_on ? (fan_reverse ? "Reverse" : "Forward") : "Off";
-"""
-        tracker_yaml += "\n".join(tracker_routes)
-        tracker_yaml += "\n                break; \n            }\n"
-        dynamic_yaml += tracker_yaml
+""" + "\n".join(tracker_routes) + "\n                break; \n            }\n"
 
     # ==========================================
-    # 3. 生成 3 个不同版本的 YAML 文件 (强制全部包含 HTTP OTA)
+    # 3. 提取公共模块：系统监控传感器 + 重启按钮
     # ==========================================
-    
-    # 【核心修改】：将 web_server 和 ota 提取到 base_common，确保所有版本 100% 具备 HTTP 升级能力！
+    system_extras = """
+# ================= 系统状态监控与重启 =================
+sensor:
+  - platform: uptime
+    name: "Gateway Uptime"
+  - platform: internal_temperature
+    name: "ESP32 Chip Temperature"
+    unit_of_measurement: "°C"
+    accuracy_decimals: 1
+  - platform: wifi_signal
+    name: "WiFi Signal dBm"
+    id: wifi_signal_db
+    update_interval: 60s
+  - platform: copy
+    source_id: wifi_signal_db
+    name: "WiFi Signal Percent"
+    filters:
+      - lambda: return min(max(2 * (x + 100.0), 0.0), 100.0);
+    unit_of_measurement: "%"
+    icon: mdi:wifi-strength-4
+
+text_sensor:
+  - platform: wifi_info
+    ip_address:
+      name: "ESP IP Address"
+    ssid:
+      name: "ESP Connected SSID"
+    bssid:
+      name: "ESP Connected BSSID"
+
+button:
+  - platform: restart
+    name: "Restart Gateway"
+    icon: mdi:restart
+"""
+
+    # ==========================================
+    # 4. 生成 CT1, CT2, CT3 (基础版，强制带 HTTP OTA 和系统监控)
+    # ==========================================
+    # 【核心修复】：移除 ota 的 password，确保 web_server v2 前端 100% 显示 OTA 升级按钮！
     base_common = """esphome:
   name: {name}
   friendly_name: {friendly_name}
-
 esp32:
   board: esp32dev
   flash_size: 4MB
@@ -191,10 +218,8 @@ esp32:
       CONFIG_FREERTOS_UNICORE: y
       CONFIG_BT_ENABLED: y
       CONFIG_BT_BLE_ENABLED: y
-
 logger:
   baud_rate: 0
-
 wifi:
   ssid: "CC"
   password: "chen1122"
@@ -203,69 +228,218 @@ wifi:
   ap:
     ssid: "CT Fallback"
     password: "12345678"
-
 api:
   reboot_timeout: 0s
 
-# ==========================================
-# 【强制核心配置】：确保所有版本都具备 HTTP 网页升级能力
-# ==========================================
+# 【HTTP 网页与 OTA 升级核心配置】
 web_server:
   port: 80
   version: 2
-
 ota:
   - platform: esphome
-    # password: "your_ota_password" # 如需密码请取消注释，网页升级时需输入
+    # 注意：此处故意不设置 password，以确保 web_server v2 前端能正常渲染 OTA 上传入口！
 
 external_components:
   - source:
       type: local
       path: components
-
 ble_gateway:
   id: ct1_ble
-
 """
+    
+    def write_yaml(filename, header, extra=""):
+        content = header + system_extras + "\n"
+        if binary_sensors: content += "binary_sensor:\n" + "\n".join(binary_sensors) + "\n\n"
+        if sensors: content += "sensor:\n" + "\n".join(sensors) + "\n\n"
+        if text_sensors: content += "text_sensor:\n" + "\n".join(text_sensors) + "\n\n"
+        if lights_yaml: content += "light:\n" + "\n".join(lights_yaml) + "\n\n"
+        if fans_yaml: content += "fan:\n" + "\n".join(fans_yaml) + "\n\n"
+        content += extra
+        content += dynamic_tracker
+        with open(os.path.join(base_dir, filename), 'w', encoding='utf-8') as f:
+            f.write(content)
 
-    # --- CT1: 精简保命版 (纯净，最稳定) ---
-    ct1_header = base_common.format(name="ct1", friendly_name="CT1 BLE Gateway (Lite)")
-    # ct1 不需要额外添加东西，直接使用 base_common
-    with open(os.path.join(base_dir, "ct1.yaml"), 'w', encoding='utf-8') as f:
-        f.write(ct1_header + dynamic_yaml)
+    write_yaml("ct1.yaml", base_common.format(name="ct1", friendly_name="CT1 BLE Gateway (Lite)"))
+    write_yaml("ct2.yaml", base_common.format(name="ct2", friendly_name="CT2 BLE Gateway (Full)") + "\nmqtt:\n  broker: \"192.168.6.88\"\n  discovery: true\nbluetooth_proxy:\n  active: false\n")
+    write_yaml("ct3.yaml", base_common.format(name="ct3", friendly_name="CT3 BLE Gateway (Custom)"))
 
-    # --- CT2: 全功能版 (包含 MQTT + 蓝牙代理) ---
-    ct2_header = base_common.format(name="ct2", friendly_name="CT2 BLE Gateway (Full)")
-    ct2_header += """
-# CT2 专属扩展功能
-mqtt:
-  broker: "192.168.6.88"
-  discovery: true
-  on_message:
-    - topic: "ct2/ble/send"
-      then:
-        - lambda: |-
-            id(ct1_ble).send_hex(x);
-
+    # ==========================================
+    # 5. 生成 CT4 (Pro 专属版：按键 + LED + 蓝牙代理 + 系统监控)
+    # ==========================================
+    ct4_base = """esphome:
+  name: ct4
+  friendly_name: CT4 BLE Gateway (Pro)
+  on_boot:
+    priority: 600.0
+    then:
+      - light.turn_on: blue_led
+      - light.turn_on: white_led
+esp32:
+  board: esp32dev
+  flash_size: 4MB
+  framework:
+    type: esp-idf
+    sdkconfig_options:
+      CONFIG_FREERTOS_UNICORE: y
+      CONFIG_BT_ENABLED: y
+      CONFIG_BT_BLE_ENABLED: y
+logger:
+  baud_rate: 0
+wifi:
+  ssid: "CC"
+  password: "chen1122"
+  fast_connect: true
+  power_save_mode: none
+  ap:
+    ssid: "CT Fallback"
+    password: "12345678"
+captive_portal:
+web_server:
+  port: 80
+  version: 2
+api:
+  reboot_timeout: 0s
+  on_client_connected:
+    - script.stop: offline_flash
+    - light.turn_off: white_led
+    - light.turn_off: blue_led
+  on_client_disconnected:
+    - script.execute: offline_flash
+ota:
+  - platform: esphome
+esp32_ble:
+  io_capability: none
+  enable_on_boot: true
 bluetooth_proxy:
-  active: false
+  active: true
+  cache_services: true
+globals:
+  - id: do_factory_reset
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  - id: safe_mode_tap_count
+    type: int
+    restore_value: no
+    initial_value: '0'
+script:
+  - id: offline_flash
+    mode: restart
+    then:
+      - while:
+          condition: { lambda: 'return true;' }
+          then: [light.toggle: white_led, delay: 500ms]
+output:
+  - platform: gpio
+    id: blue_led_out
+    pin: { number: GPIO27, inverted: true }
+  - platform: gpio
+    id: white_led_out
+    pin: { number: GPIO26, inverted: true }
+light:
+  - platform: binary
+    name: Blue LED
+    id: blue_led
+    output: blue_led_out
+    restore_mode: RESTORE_DEFAULT_OFF
+  - platform: binary
+    name: White LED
+    id: white_led
+    output: white_led_out
+    restore_mode: RESTORE_DEFAULT_OFF
+ble_gateway:
+  id: ct1_ble
 """
-    with open(os.path.join(base_dir, "ct2.yaml"), 'w', encoding='utf-8') as f:
-        f.write(ct2_header + dynamic_yaml)
 
-    # --- CT3: 定制扩展版 (预留接口，同样带 HTTP 升级) ---
-    ct3_header = base_common.format(name="ct3", friendly_name="CT3 BLE Gateway (Custom)")
-    ct3_header += """
-# CT3 专属扩展功能 (示例：此处可添加你需要的特定组件，如 deep_sleep 等)
-# 注意：本版本同样保留了 web_server，确保可以通过 HTTP 升级！
+    # 物理按键配置
+    keys_yaml = """
+  # KEY1 GPIO34 (长按8s + KEY4 恢复出厂)
+  - platform: gpio
+    id: key1
+    name: KEY1
+    pin: { number: GPIO34, inverted: true }
+    filters: [delayed_on: 20ms, delayed_off: 20ms]
+    on_multi_click:
+      - timing: [ON for at least 8s]
+        then:
+          - if: { condition: { binary_sensor.is_on: key4 }, then: [delay: 500ms, if: { condition: { binary_sensor.is_on: key4 }, then: [lambda: 'id(do_factory_reset) = true;', repeat: { count: 5, then: [light.toggle: white_led, delay: 100ms] }, lambda: 'App.reboot();' ] }] }
+      - timing: [ON for at least 1.5s]
+        then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key1", mode: "long" } }]
+      - timing: [ON for at most 0.5s, OFF for at most 0.3s, ON for at most 0.5s, OFF for at least 0.3s]
+        then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key1", mode: "double" } }]
+      - timing: [ON for at most 0.5s, OFF for at least 0.3s]
+        then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key1", mode: "single" } }]
+
+  # KEY2 GPIO35 (连按5次安全模式重启)
+  - platform: gpio
+    id: key2
+    name: KEY2
+    pin: { number: GPIO35, inverted: true }
+    filters: [delayed_on: 20ms, delayed_off: 20ms]
+    on_multi_click:
+      - timing: [ON for at least 1.5s]
+        then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key2", mode: "long" } }]
+      - timing: [ON for at most 0.5s, OFF for at most 0.3s, ON for at most 0.5s, OFF for at least 0.3s]
+        then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key2", mode: "double" } }]
+      - timing: [ON for at most 0.5s, OFF for at least 0.3s]
+        then:
+          - light.turn_on: blue_led
+          - delay: 200ms
+          - light.turn_off: blue_led
+          - homeassistant.event: { event: esphome.gateway_key, data: { key: "key2", mode: "single" } }
+          - lambda: 'id(safe_mode_tap_count)++;'
+          - if:
+              condition: { lambda: 'return id(safe_mode_tap_count) >= 5;' }
+              then: [lambda: 'id(safe_mode_tap_count) = 0;', repeat: { count: 8, then: [light.toggle: blue_led, delay: 150ms] }, lambda: 'App.safe_reboot();']
+              else: [delay: 5000ms, lambda: 'id(safe_mode_tap_count) = 0;']
+
+  # KEY3 GPIO32
+  - platform: gpio
+    id: key3
+    name: KEY3
+    pin: { number: GPIO32, inverted: true }
+    filters: [delayed_on: 20ms, delayed_off: 20ms]
+    on_multi_click:
+      - timing: [ON for at least 1.5s]
+        then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key3", mode: "long" } }]
+      - timing: [ON for at most 0.5s, OFF for at most 0.3s, ON for at most 0.5s, OFF for at least 0.3s]
+        then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key3", mode: "double" } }]
+      - timing: [ON for at most 0.5s, OFF for at least 0.3s]
+        then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key3", mode: "single" } }]
+
+  # KEY4 GPIO33
+  - platform: gpio
+    id: key4
+    name: KEY4
+    pin: { number: GPIO33, inverted: true }
+    filters: [delayed_on: 20ms, delayed_off: 20ms]
+    on_multi_click:
+      - timing: [ON for at least 1.5s]
+        then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key4", mode: "long" } }]
+      - timing: [ON for at most 0.5s, OFF for at most 0.3s, ON for at most 0.5s, OFF for at least 0.3s]
+        then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key4", mode: "double" } }]
+      - timing: [ON for at most 0.5s, OFF for at least 0.3s]
+        then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key4", mode: "single" } }]
 """
-    with open(os.path.join(base_dir, "ct3.yaml"), 'w', encoding='utf-8') as f:
-        f.write(ct3_header + dynamic_yaml)
+
+    # 组装 CT4 YAML
+    ct4_content = ct4_base + system_extras + "\n"
+    if binary_sensors: 
+        ct4_content += "binary_sensor:\n" + "\n".join(binary_sensors) + keys_yaml + "\n\n"
+    else:
+        ct4_content += "binary_sensor:\n" + keys_yaml + "\n\n"
+        
+    if sensors: ct4_content += "sensor:\n" + "\n".join(sensors) + "\n\n"
+    if text_sensors: ct4_content += "text_sensor:\n" + "\n".join(text_sensors) + "\n\n"
+    if lights_yaml: ct4_content += "light:\n" + "\n".join(lights_yaml) + "\n\n"
+    if fans_yaml: ct4_content += "fan:\n" + "\n".join(fans_yaml) + "\n\n"
+    ct4_content += dynamic_tracker
+
+    with open(os.path.join(base_dir, "ct4.yaml"), 'w', encoding='utf-8') as f:
+        f.write(ct4_content)
 
     print(f"🎉 Successfully generated: {cpp_path}")
-    print(f"🎉 Successfully generated: ct1.yaml (Lite + HTTP OTA)")
-    print(f"🎉 Successfully generated: ct2.yaml (Full + HTTP OTA)")
-    print(f"🎉 Successfully generated: ct3.yaml (Custom + HTTP OTA)")
+    print(f"🎉 Successfully generated: ct1/2/3/4.yaml (All with System Monitors, Restart Button & Fixed HTTP OTA)")
 
 if __name__ == "__main__":
     base_dir = os.path.dirname(os.path.abspath(__file__))
