@@ -20,14 +20,14 @@ void BLEGateway::setup() {
 void BLEGateway::loop() {
     const uint32_t now = millis();
 
-    // 1. 处理冷却时间
+    // 1. 处理冷却时间 (确保两个包之间有足够的间隔)
     if (cooldown_) {
         if (now - adv_stop_time_ < ADV_COOLDOWN_MS) return;
         cooldown_ = false;
         ESP_LOGI(TAG, "BLE GAP READY");
     }
 
-    // 2. 处理广播超时
+    // 2. 处理广播超时 (每个包固定广播 100ms)
     if (adv_running_ && now - adv_start_time_ >= ADV_DURATION_MS) {
         esp_ble_gap_stop_advertising();
         adv_running_   = false;
@@ -35,13 +35,14 @@ void BLEGateway::loop() {
         cooldown_      = true;
         ESP_LOGI(TAG, "BLE ADV STOP");
 
+        // 如果队列里还有包，设定下一次发送的时间
         if (!packet_queue_.empty()) {
             next_packet_time_    = now + PACKET_GAP_MS;
             waiting_next_packet_ = true;
         }
     }
 
-    // 3. 处理下一个数据包
+    // 3. 处理下一个数据包 (时间到了自动发送)
     if (waiting_next_packet_ && now >= next_packet_time_) {
         waiting_next_packet_ = false;
         ESP_LOGI(TAG, "SEND NEXT PACKET");
@@ -58,7 +59,7 @@ std::vector<uint8_t> BLEGateway::hex_to_bytes(const std::string &hex) {
     char pair[3] = {0, 0, 0};
     int n = 0;
     for (char c : hex) {
-        // 【优化】使用标准库函数判断十六进制字符，更安全、语义更清晰
+        // 使用标准库函数判断十六进制字符，更安全、语义更清晰
         if (!std::isxdigit(static_cast<unsigned char>(c))) continue;
         pair[n++] = c;
         if (n == 2) {
@@ -138,17 +139,29 @@ bool BLEGateway::send_command(const std::string &device, const std::string &acti
     return command_router_.send_command(device, action);
 }
 
-// ---------- 发送队列管理 ----------
+// ---------- 发送队列管理 (核心修复区) ----------
 
 void BLEGateway::enqueue_packets(const std::vector<std::string> &packets) {
     if (packets.empty()) return;
-    // 【优化】使用 assign 一次性替换队列内容，比循环 push_back 更高效且代码更简洁
+    
+    // 【核心逻辑 1】使用 assign 替换队列。
+    // 配合“单选指令”逻辑，这里放入的就是当前动作的完整包序列（1个、2个或3个）。
+    // 如果此时有新的指令进来，它会直接接管队列（符合“开灯就是开灯，不追加”的要求）。
     packet_queue_.assign(packets.begin(), packets.end());
-    send_next_packet();
+    
+    // 【核心逻辑 2】状态机保护。
+    // 只有在当前没有正在广播，也没有在等待发送下一个包时，才主动启动发送流程。
+    // 如果已经在发送队列中（比如正在发双包的第 1 个包），loop() 会自动处理后续的包，
+    // 此时绝不能在这里打断，必须等待当前 100ms 广播自然结束，否则会丢包或报错。
+    if (!adv_running_ && !waiting_next_packet_) {
+        send_next_packet();
+    }
 }
 
 void BLEGateway::send_next_packet() {
     if (packet_queue_.empty()) return;
+    
+    // 取出队首的包并发送
     std::string packet = std::move(packet_queue_.front());
     packet_queue_.pop_front();
     send_raw_packet(packet);
