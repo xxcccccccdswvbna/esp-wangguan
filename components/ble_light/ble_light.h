@@ -29,11 +29,6 @@ protected:
     std::string last_brightness_action_;
     std::string last_color_temp_action_;
     bool        is_currently_on_{false};
-    
-    // 🔥 新增：延迟发送队列
-    std::string pending_brightness_;
-    std::string pending_color_;
-    uint32_t    pending_send_time_{0};
 };
 
 }  // namespace ble_light
