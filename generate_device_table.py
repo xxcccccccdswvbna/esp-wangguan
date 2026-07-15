@@ -91,7 +91,7 @@ def generate_all(config_dir: Path, base_dir: Path):
         if "fan" in dev:
             sections["fan"].append(f'  - platform: ble_fan\n    id: {sid}_fan_ctrl\n    name: "{name} Fan"\n    ble_device_id: "{dev["fan"]["id"]}"\n    gateway: ct1_ble')
 
-    # ========== 3. BLE Tracker (🔥 核心修复：134D 偏移量校准) ==========
+    # ========== 3. BLE Tracker ==========
     dev_8153 = [d for d in devices if d["protocol"] == "8153"]
     dev_134d = [d for d in devices if d["protocol"] == "134D"]
 
@@ -110,7 +110,6 @@ def generate_all(config_dir: Path, base_dir: Path):
 """
     if dev_8153:
         tracker += """
-                // === Protocol 8153 ===
                 if (raw[0] == 0x81 && raw[1] == 0x53) {
                     std::string he = "";
                     for (uint8_t b : raw) { char buf[3]; sprintf(buf, "%02x", b); he += buf; }
@@ -143,7 +142,7 @@ def generate_all(config_dir: Path, base_dir: Path):
 
     if dev_134d:
         tracker += """
-                // === Protocol 134D (🔥 偏移量已校准) ===
+                // === Protocol 134D ===
 """
         for dev in dev_134d:
             sid = dev["id"].replace(".", "_")
@@ -151,17 +150,14 @@ def generate_all(config_dir: Path, base_dir: Path):
             mac_array = "{" + ", ".join([f"0x{b}" for b in reversed(mac_bytes)]) + "}"
             tracker += f"""
                 uint8_t target_mac_{sid}[6] = {mac_array};
-                // 🔥 从索引 2 开始搜索，跳过 Company ID (raw[0..1])
                 for (int i = 2; i <= (int)raw.size() - 6; i++) {{
                     if (memcmp(&raw[i], target_mac_{sid}, 6) == 0) {{
-                        // 找到 MAC 后，根据相对偏移量解析 (MAC 在 i..i+5)
-                        bool power_on = (raw[i + 7] == 0x01); // 开关在 MAC 后第 7 个字节
-                        uint16_t brt_raw_val = (raw[i + 12] << 8) | raw[i + 13]; // 亮度在 MAC 后第 12,13 字节
+                        bool power_on = (raw[i + 7] == 0x01);
+                        uint16_t brt_raw_val = (raw[i + 12] << 8) | raw[i + 13];
                         int brt_pct = (brt_raw_val == 0xFFFF) ? 100 : (int)(brt_raw_val / 655.35);
-                        
-                        uint8_t state_byte = raw[i + 14]; // 风扇状态在 MAC 后第 14 字节
+                        uint8_t state_byte = raw[i + 14];
                         bool fan_running = (state_byte == 0x13 || state_byte == 0x03);
-                        uint8_t fan_gear = raw[i + 15]; // 风扇档位在 MAC 后第 15 字节
+                        uint8_t fan_gear = raw[i + 15];
                         int fan_speed = fan_running ? (fan_gear + 1) : 0;
                         std::string fan_dir_str = fan_running ? "Forward" : "Off";
 
@@ -178,7 +174,7 @@ def generate_all(config_dir: Path, base_dir: Path):
 """
     tracker += "            }\n"
 
-    # ========== 4. 写入 YAML ==========
+    # ========== 4. 写入 CT1, CT2, CT3 ==========
     base = """esphome:
   name: {name}
   friendly_name: {fn}
@@ -225,12 +221,151 @@ ble_gateway:
     write("ct2.yaml", base.format(name="ct2", fn="CT2 Full"), extra='\nmqtt:\n  broker: "192.168.6.88"\n  discovery: true\n  on_message:\n    - topic: "ct2/ble/send"\n      then:\n        - lambda: |-\n            id(ct1_ble).send_hex(x);\nbluetooth_proxy:\n  active: false\n')
     write("ct3.yaml", base.format(name="ct3", fn="CT3 Custom"))
 
-    # ========== 5. CT4 (Pro 专属版，保持原样) ==========
-    # (此处省略 CT4 的冗长代码，请确保你本地的脚本包含完整的 CT4 生成逻辑，直接复用上一版的 CT4 代码即可，只需确保 tracker 部分被正确追加)
-    # 为了完整性，这里直接调用 write 生成基础版，如果你有完整的 CT4 代码，请替换此处。
-    write("ct4.yaml", base.format(name="ct4", fn="CT4 Pro"))
+    # ========== 5. 完整写入 CT4 (Pro 专属版，无任何省略) ==========
+    ct4_header = """esphome:
+  name: ct4
+  friendly_name: CT4 Pro
+  on_boot:
+    priority: 600.0
+    then:
+      - light.turn_on: blue_led
+      - light.turn_on: white_led
+esp32:
+  board: esp32dev
+  flash_size: 4MB
+  framework:
+    type: esp-idf
+    sdkconfig_options:
+      CONFIG_FREERTOS_UNICORE: y
+      CONFIG_BT_ENABLED: y
+      CONFIG_BT_BLE_ENABLED: y
+logger:
+  baud_rate: 0
+wifi:
+  ssid: "CC"
+  password: "chen1122"
+  fast_connect: true
+  power_save_mode: none
+  ap:
+    ssid: "CT1 Fallback"
+    password: "12345678"
+captive_portal:
+web_server:
+api:
+  reboot_timeout: 0s
+  on_client_connected:
+    - script.stop: offline_flash
+    - light.turn_off: white_led
+    - light.turn_off: blue_led
+  on_client_disconnected:
+    - script.execute: offline_flash
+ota:
+  - platform: esphome
+esp32_ble:
+  io_capability: none
+  enable_on_boot: true
+bluetooth_proxy:
+  active: true
+  cache_services: true
+globals:
+  - id: do_factory_reset
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  - id: safe_mode_tap_count
+    type: int
+    restore_value: no
+    initial_value: '0'
+script:
+  - id: offline_flash
+    mode: restart
+    then:
+      - while:
+          condition: { lambda: 'return true;' }
+          then: [light.toggle: white_led, delay: 500ms]
+output:
+  - platform: gpio
+    id: blue_led_out
+    pin: { number: GPIO27, inverted: true }
+  - platform: gpio
+    id: white_led_out
+    pin: { number: GPIO26, inverted: true }
+external_components:
+  - source:
+      type: local
+      path: components
+ble_gateway:
+  id: ct1_ble
+"""
+    
+    ct4_leds = [
+        '  - platform: binary\n    name: Blue LED\n    id: blue_led\n    output: blue_led_out\n    restore_mode: RESTORE_DEFAULT_OFF',
+        '  - platform: binary\n    name: White LED\n    id: white_led\n    output: white_led_out\n    restore_mode: RESTORE_DEFAULT_OFF'
+    ]
+    
+    ct4_keys = """
+  - platform: gpio
+    id: key1
+    name: KEY1
+    pin: { number: GPIO34, inverted: true }
+    filters: [delayed_on: 20ms, delayed_off: 20ms]
+    on_multi_click:
+      - timing: [ON for at least 8s]
+        then:
+          - if: { condition: { binary_sensor.is_on: key4 }, then: [delay: 500ms, if: { condition: { binary_sensor.is_on: key4 }, then: [lambda: 'id(do_factory_reset)=true;', repeat: { count: 5, then: [light.toggle: white_led, delay: 100ms] }, lambda: 'App.reboot();'] }]}
+      - timing: [ON for at least 1.5s]
+        then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key1", mode: "long" } }]
+      - timing: [ON for at most 0.5s, OFF for at most 0.3s, ON for at most 0.5s, OFF for at least 0.3s]
+        then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key1", mode: "double" } }]
+      - timing: [ON for at most 0.5s, OFF for at least 0.3s]
+        then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key1", mode: "single" } }]
+  - platform: gpio
+    id: key2
+    name: KEY2
+    pin: { number: GPIO35, inverted: true }
+    filters: [delayed_on: 20ms, delayed_off: 20ms]
+    on_multi_click:
+      - timing: [ON for at least 1.5s]
+        then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key2", mode: "long" } }]
+      - timing: [ON for at most 0.5s, OFF for at least 0.3s]
+        then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key2", mode: "single" } }]
+  - platform: gpio
+    id: key3
+    name: KEY3
+    pin: { number: GPIO32, inverted: true }
+    filters: [delayed_on: 20ms, delayed_off: 20ms]
+    on_multi_click:
+      - timing: [ON for at least 1.5s]
+        then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key3", mode: "long" } }]
+      - timing: [ON for at most 0.5s, OFF for at least 0.3s]
+        then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key3", mode: "single" } }]
+  - platform: gpio
+    id: key4
+    name: KEY4
+    pin: { number: GPIO33, inverted: true }
+    filters: [delayed_on: 20ms, delayed_off: 20ms]
+    on_multi_click:
+      - timing: [ON for at least 1.5s]
+        then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key4", mode: "long" } }]
+      - timing: [ON for at most 0.5s, OFF for at least 0.3s]
+        then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key4", mode: "single" } }]
+"""
 
-    print("✅ All files generated successfully with calibrated 134D offsets.")
+    c4 = ct4_header
+    bs_content = "\n".join(sections["binary_sensor"]) + ct4_keys if sections["binary_sensor"] else ct4_keys
+    c4 += f"binary_sensor:\n{bs_content}\n\n"
+    if sections["sensor"]: c4 += "sensor:\n" + "\n".join(sections["sensor"]) + "\n\n"
+    if sections["text_sensor"]: c4 += "text_sensor:\n" + "\n".join(sections["text_sensor"]) + "\n\n"
+    if sections["button"]: c4 += "button:\n" + "\n".join(sections["button"]) + "\n\n"
+    
+    all_lights = ct4_leds + sections["light"]
+    if all_lights: c4 += "light:\n" + "\n".join(all_lights) + "\n\n"
+    if sections["fan"]: c4 += "fan:\n" + "\n".join(sections["fan"]) + "\n\n"
+    c4 += tracker
+    
+    (base_dir / "ct4.yaml").write_text(c4)
+
+    print("✅ All 4 YAML files and C++ generated successfully with full CT4 features.")
 
 if __name__ == "__main__":
     base = Path(__file__).resolve().parent
