@@ -1,11 +1,11 @@
 {
-  "id": "device.cw3",
+  "id": "device.cw",
   "name": "次卧风扇灯",
   "mac": "00:00:70:2d:cf:f0", 
    "protocol": "134D",
   
   "light": {
-    "id": "light.cw1",
+    "id": "light.cw",
     "actions": {
       "on": [
         "0x0201021BFF114D1917F0CF2D70000001CECF9B2D2D7070005CBF1D60F0F0F4",
@@ -29,7 +29,7 @@
   },
   
   "fan": {
-    "id": "fan.cw2",       
+    "id": "fan.cw",       
     "actions": {
       "on": ["0x0201021BFF114D1911F0CF2D700000011C60F9F0FC3FCFCF9D2D2D70700057", "0x0201021BFF114D191DF0CF2D7000000171005CBF1D60F0F0FC3FCFCF9D2D2F"],
       "off": ["0x0201021BFF114D191BF0CF2D700000012C7079005CBF1D60F0F0FC3FCFCF96", "0x0201021BFF114D1918F0CF2D70000001CE9D2D2D7070005CBF1D60F0F0FC3D"],
