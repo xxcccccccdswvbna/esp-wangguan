@@ -10,13 +10,11 @@ void BLEFan::setup() {
     ESP_LOGI(TAG, "BLE Fan setup");
 }
 
-void BLEFan::dump_config() {
-    ESP_LOGCONFIG(TAG, "BLE Fan:");
-    ESP_LOGCONFIG(TAG, "  Device ID: %s", this->device_id_.c_str());
-}
+// 🔥 修复 1：移除了 dump_config() 的实现，因为 .h 中没有声明它
 
 fan::FanTraits BLEFan::get_traits() {
-    return fan::FanTraits(false, true, true, 6);
+    // 参数依次为：支持摇摆(false), 支持方向(true), 支持速度(true), 速度档位数量(6)
+    return fan::FanTraits(false, true, true, 6); 
 }
 
 void BLEFan::control(const fan::FanCall &call) {
@@ -28,7 +26,9 @@ void BLEFan::control(const fan::FanCall &call) {
     // 获取目标状态
     const bool target_on = call.get_state().has_value() ? *call.get_state() : this->state;
     const int target_speed = call.get_speed().has_value() ? *call.get_speed() : this->speed;
-    const bool target_reverse = call.get_direction().has_value() ? *call.get_direction() : this->direction;
+    
+    // 🔥 修复 2：direction 是 FanDirection 枚举类型，不再是 bool
+    const fan::FanDirection target_dir = call.get_direction().has_value() ? *call.get_direction() : this->direction;
 
     // 节流保护
     const uint32_t now = millis();
@@ -38,9 +38,9 @@ void BLEFan::control(const fan::FanCall &call) {
     }
 
     ESP_LOGI(TAG, "Fan control: state=%d, speed=%d, dir=%d (was: state=%d, speed=%d, dir=%d)",
-             target_on, target_speed, target_reverse, this->state, this->speed, this->direction);
+             target_on, target_speed, target_dir, this->state, this->speed, this->direction);
 
-    // 🔥 核心修复：智能单选，只发一个最核心的指令
+    // 智能单选，只发一个最核心的指令
     std::string action_to_send = "";
 
     if (!target_on) {
@@ -59,8 +59,9 @@ void BLEFan::control(const fan::FanCall &call) {
             }
         } else {
             // 已经是开着的：只发变化了的参数
-            if (target_reverse != this->direction) {
-                action_to_send = target_reverse ? "reverse" : "forward";
+            // 🔥 修复 3：使用枚举类型进行比较
+            if (target_dir != this->direction) {
+                action_to_send = (target_dir == fan::FAN_DIRECTION_REVERSE) ? "reverse" : "forward";
             } else if (target_speed != this->speed) {
                 action_to_send = "speed_" + std::to_string(target_speed);
             }
@@ -75,7 +76,8 @@ void BLEFan::control(const fan::FanCall &call) {
     // 更新状态
     this->state = target_on;
     this->speed = target_speed;
-    this->direction = target_reverse;
+    // 🔥 修复 4：赋值给 this->direction 时，使用正确的枚举类型
+    this->direction = target_dir; 
     last_send_time_ = now;
 
     this->publish_state();
