@@ -10,6 +10,12 @@ void BLEFan::setup() {
     ESP_LOGI(TAG, "BLE Fan setup");
 }
 
+// 🔥 核心修复：必须实现 loop()，因为继承了 Component。
+// 即使当前不需要在 loop 中处理任何逻辑，也必须提供一个空实现，否则链接器会报错。
+void BLEFan::loop() {
+    // 空实现
+}
+
 fan::FanTraits BLEFan::get_traits() {
     // 参数依次为：支持摇摆(false), 支持方向(true), 支持速度(true), 速度档位数量(6)
     return fan::FanTraits(false, true, true, 6); 
@@ -25,7 +31,7 @@ void BLEFan::control(const fan::FanCall &call) {
     const bool target_on = call.get_state().has_value() ? *call.get_state() : this->state;
     const int target_speed = call.get_speed().has_value() ? *call.get_speed() : this->speed;
     
-    // 🔥 修复：direction 是 FanDirection 枚举类型
+    // direction 是 FanDirection 枚举类型 (enum class)
     const fan::FanDirection target_dir = call.get_direction().has_value() ? *call.get_direction() : this->direction;
 
     // 节流保护
@@ -36,7 +42,8 @@ void BLEFan::control(const fan::FanCall &call) {
     }
 
     ESP_LOGI(TAG, "Fan control: state=%d, speed=%d, dir=%d (was: state=%d, speed=%d, dir=%d)",
-             target_on, target_speed, static_cast<int>(target_dir), this->state, this->speed, static_cast<int>(this->direction));
+             target_on, target_speed, static_cast<int>(target_dir), 
+             this->state, this->speed, static_cast<int>(this->direction));
 
     // 智能单选，只发一个最核心的指令
     std::string action_to_send = "";
@@ -57,7 +64,7 @@ void BLEFan::control(const fan::FanCall &call) {
             }
         } else {
             // 已经是开着的：只发变化了的参数
-            // 🔥 修复：使用 enum class 的正确语法 FanDirection::REVERSE
+            // 使用 enum class 的正确语法 FanDirection::REVERSE
             if (target_dir != this->direction) {
                 action_to_send = (target_dir == fan::FanDirection::REVERSE) ? "reverse" : "forward";
             } else if (target_speed != this->speed) {
