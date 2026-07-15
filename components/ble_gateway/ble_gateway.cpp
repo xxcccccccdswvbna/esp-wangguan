@@ -144,15 +144,16 @@ bool BLEGateway::send_command(const std::string &device, const std::string &acti
 void BLEGateway::enqueue_packets(const std::vector<std::string> &packets) {
     if (packets.empty()) return;
     
-    // 【核心逻辑 1】使用 assign 替换队列。
-    // 配合“单选指令”逻辑，这里放入的就是当前动作的完整包序列（1个、2个或3个）。
-    // 如果此时有新的指令进来，它会直接接管队列（符合“开灯就是开灯，不追加”的要求）。
-    packet_queue_.assign(packets.begin(), packets.end());
+    // 🔥 核心升级：智能队列逻辑
+    // 如果当前正在广播，或者正在等待发送下一个包，说明队列正在工作，此时追加到队尾
+    if (adv_running_ || waiting_next_packet_) {
+        packet_queue_.insert(packet_queue_.end(), packets.begin(), packets.end());
+    } else {
+        // 否则，清空队列，替换为新的指令（实现“不追加，只执行最新”的逻辑）
+        packet_queue_.assign(packets.begin(), packets.end());
+    }
     
-    // 【核心逻辑 2】状态机保护。
-    // 只有在当前没有正在广播，也没有在等待发送下一个包时，才主动启动发送流程。
-    // 如果已经在发送队列中（比如正在发双包的第 1 个包），loop() 会自动处理后续的包，
-    // 此时绝不能在这里打断，必须等待当前 100ms 广播自然结束，否则会丢包或报错。
+    // 如果当前没有在发送，立即启动
     if (!adv_running_ && !waiting_next_packet_) {
         send_next_packet();
     }
