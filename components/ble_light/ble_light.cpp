@@ -32,14 +32,27 @@ void BLELight::write_state(light::LightState *state) {
     const std::string target_bright_action = map_brightness(brightness);
     const std::string target_temp_action   = map_color_temp(color_temp);
 
-    // 🔥 核心修复：不再依赖 is_currently_on_ 猜测，而是对比 HA 目标状态与上次实际发送的状态
+    // 🔥 核心修复：严密的 need_update 判断逻辑，打破“未知”状态死锁
     bool need_update = false;
-    if (target_on != last_sent_on_) need_update = true;
-    if (target_bright_action != last_sent_brightness_) need_update = true;
-    if (target_temp_action != last_sent_color_) need_update = true;
+    
+    // 1. 开关状态发生变化，必须更新
+    if (target_on != last_sent_on_) {
+        need_update = true;
+    } 
+    // 2. 如果都是“开”，检查亮度和色温是否发生变化
+    else if (target_on && last_sent_on_) {
+        if (target_bright_action != last_sent_brightness_ || target_temp_action != last_sent_color_) {
+            need_update = true;
+        }
+    }
+    // 3. 🔥 如果都是“关”，但这是系统启动后的第一次操作（缓存为空），强制更新一次以同步 HA 状态
+    else if (!target_on && !last_sent_on_ && last_sent_brightness_.empty()) {
+        need_update = true;
+        ESP_LOGI(TAG, "First-time sync: forcing update to break unknown state.");
+    }
 
     if (!need_update) {
-        ESP_LOGD(TAG, "State unchanged, skipping.");
+        ESP_LOGD(TAG, "State unchanged, skipping. (target_on=%d, last_sent_on=%d)", target_on, last_sent_on_);
         return;
     }
 
@@ -50,8 +63,8 @@ void BLELight::write_state(light::LightState *state) {
         return;
     }
 
-    ESP_LOGI(TAG, "State: on=%d bright=%.2f temp=%.2f -> mapped: %s, %s",
-             target_on, brightness, color_temp, target_bright_action.c_str(), target_temp_action.c_str());
+    ESP_LOGI(TAG, "Executing: on=%d, bright=%s, temp=%s", 
+             target_on, target_bright_action.c_str(), target_temp_action.c_str());
 
     if (!target_on) {
         // 关灯：只发 off
@@ -78,7 +91,7 @@ void BLELight::write_state(light::LightState *state) {
         }
     }
 
-    // 🔥 更新“上次实际发送”的缓存，而不是猜测的状态
+    // 🔥 更新“上次实际发送”的缓存
     last_sent_on_        = target_on;
     last_sent_brightness_= target_bright_action;
     last_sent_color_     = target_temp_action;
