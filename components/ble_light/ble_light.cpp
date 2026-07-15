@@ -32,8 +32,7 @@ void BLELight::write_state(light::LightState *state) {
     const std::string target_bright_action = map_brightness(brightness);
     const std::string target_temp_action   = map_color_temp(color_temp);
 
-    // 🔥 核心修复：构建当前期望的动作组合字符串，与上次发送的进行对比
-    // 如果目标是“关”，我们构造一个特殊的 "off" 标记
+    // 构建当前期望的动作组合字符串
     std::string current_action_signature = target_on ? (target_bright_action + "+" + target_temp_action) : "OFF";
     
     bool need_update = false;
@@ -48,13 +47,20 @@ void BLELight::write_state(light::LightState *state) {
         need_update = true;
     }
 
+    const uint32_t now = millis();
+
     if (!need_update) {
-        ESP_LOGD(TAG, "State unchanged, skipping. (sig: %s)", current_action_signature.c_str());
-        return;
+        // 🔥 核心修复：如果签名相同，但距离上次发送已经超过 2 秒，强制执行一次以打破死锁
+        if (now - last_send_time_ > 2000) {
+            ESP_LOGI(TAG, "Forcing update to break deadlock. (sig: %s)", current_action_signature.c_str());
+            need_update = true;
+        } else {
+            ESP_LOGD(TAG, "State unchanged, skipping. (sig: %s)", current_action_signature.c_str());
+            return;
+        }
     }
 
     // 节流保护
-    const uint32_t now = millis();
     if (now - last_send_time_ < THROTTLE_MS) {
         ESP_LOGD(TAG, "Throttled, skipping.");
         return;
@@ -67,10 +73,9 @@ void BLELight::write_state(light::LightState *state) {
         gateway_->send_command(device_id_, "off");
     } else {
         // 开灯或调节：
-        // 如果上次是关，或者这是第一次，先发送 on 唤醒
         if (last_sent_signature_ == "OFF" || last_sent_signature_.empty()) {
+            // 从关 -> 开：利用智能队列，连续发送 on 和 brightness/color
             gateway_->send_command(device_id_, "on");
-            // 利用智能队列追加亮度和色温
             if (target_bright_action != "brightness_1") {
                 gateway_->send_command(device_id_, target_bright_action);
             }
@@ -79,8 +84,7 @@ void BLELight::write_state(light::LightState *state) {
             }
         } else {
             // 已经是开着的：只发变化了的参数
-            // 注意：由于我们用了签名对比，这里可以直接发对应的动作
-            if (target_temp_action != "color_6500") { // 简单判断，防止重复发默认值
+            if (target_temp_action != "color_6500") {
                  gateway_->send_command(device_id_, target_temp_action);
             }
             if (target_bright_action != "brightness_1") {
@@ -89,7 +93,7 @@ void BLELight::write_state(light::LightState *state) {
         }
     }
 
-    // 🔥 更新签名缓存
+    // 更新签名缓存
     last_sent_signature_ = current_action_signature;
     last_send_time_      = now;
 }
