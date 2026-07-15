@@ -1,5 +1,6 @@
 #include "ble_light.h"
 #include "esphome/core/log.h"
+#include <cmath>
 
 namespace esphome {
 namespace ble_light {
@@ -31,7 +32,7 @@ void BLELight::write_state(light::LightState *state) {
     const std::string target_bright_action = map_brightness(brightness);
     const std::string target_temp_action   = map_color_temp(color_temp);
 
-    // 1. 完全无变化，直接跳过
+    // 完全无变化直接跳过
     if (target_on == is_currently_on_) {
         if (!target_on ||
             (target_bright_action == last_brightness_action_ &&
@@ -41,71 +42,118 @@ void BLELight::write_state(light::LightState *state) {
         }
     }
 
-    // 2. 节流保护
+    // 节流保护
     const uint32_t now = millis();
     if (now - last_send_time_ < THROTTLE_MS) {
         ESP_LOGD(TAG, "Throttled, skipping.");
         return;
     }
 
-    ESP_LOGI(TAG, "State: on=%d bright=%.2f temp=%.2f (was_on=%d)",
-             target_on, brightness, color_temp, is_currently_on_);
-
-    // 🔥 3. 核心修复：每次只精选 1 个最核心的指令发送，确保该指令的多个包能完整发完，不被覆盖
-    std::string action_to_send = "";
+    ESP_LOGI(TAG, "State: on=%d bright=%.2f temp=%.2f (was_on=%d) -> mapped: %s, %s",
+             target_on, brightness, color_temp, is_currently_on_,
+             target_bright_action.c_str(), target_temp_action.c_str());
 
     if (!target_on) {
-        // 【关灯】：如果当前是开着的，发送关灯指令
+        // 关灯：只发 off
         if (is_currently_on_) {
-            action_to_send = "off";
+            gateway_->send_command(device_id_, "off");
         }
     } else {
-        // 【开灯或调节】：
+        // 开灯或调节：
         if (!is_currently_on_) {
-            // 从关 -> 开：优先发送亮度或色温指令（通常这类指令本身就包含“开灯”效果）
-            // 如果亮度/色温没有明显变化，则发送纯 "on" 指令
-            if (target_bright_action != "brightness_1" || target_temp_action != "color_6500") {
-                // 优先发亮度，因为亮度指令通常权重更高
-                action_to_send = target_bright_action; 
-            } else {
-                action_to_send = "on";
-            }
+            // 从关 -> 开，先发 on，再延迟发 brightness/color
+            gateway_->send_command(device_id_, "on");
+            
+            // 标记延迟发送（200ms 后发送 brightness/color）
+            pending_brightness_ = target_bright_action;
+            pending_color_ = target_temp_action;
+            pending_send_time_ = now + 200;
+            
+            ESP_LOGD(TAG, "Scheduled brightness/color send in 200ms");
         } else {
-            // 已经是开着的：检查哪个参数变了，只发送变化了的那个单独指令
+            // 已经是开着的：只发变化了的参数
             if (target_temp_action != last_color_temp_action_) {
-                action_to_send = target_temp_action;
-            } else if (target_bright_action != last_brightness_action_) {
-                action_to_send = target_bright_action;
+                gateway_->send_command(device_id_, target_temp_action);
+            }
+            if (target_bright_action != last_brightness_action_) {
+                gateway_->send_command(device_id_, target_bright_action);
             }
         }
     }
 
-    // 4. 执行发送 (此时 action_to_send 只有一个值，它的 1~2 个包会被完整放入队列并依次发完)
-    if (!action_to_send.empty()) {
-        gateway_->send_command(device_id_, action_to_send);
-    }
-
-    // 5. 更新本地缓存状态
+    // 更新缓存
     is_currently_on_        = target_on;
     last_brightness_action_ = target_bright_action;
     last_color_temp_action_ = target_temp_action;
     last_send_time_         = now;
 }
 
-std::string BLELight::map_brightness(float brightness) {
-    if (brightness < 0.15f) return "brightness_1";
-    if (brightness < 0.30f) return "brightness_20";
-    if (brightness < 0.45f) return "brightness_40";
-    if (brightness < 0.55f) return "brightness_50";
-    if (brightness < 0.70f) return "brightness_60";
-    if (brightness < 0.90f) return "brightness_80";
-    return "brightness_100";
+void BLELight::loop() {
+    if (pending_send_time_ > 0 && millis() >= pending_send_time_) {
+        if (!pending_brightness_.empty()) {
+            gateway_->send_command(device_id_, pending_brightness_);
+            ESP_LOGD(TAG, "Delayed send: %s", pending_brightness_.c_str());
+            pending_brightness_ = "";
+        }
+        if (!pending_color_.empty()) {
+            gateway_->send_command(device_id_, pending_color_);
+            ESP_LOGD(TAG, "Delayed send: %s", pending_color_.c_str());
+            pending_color_ = "";
+        }
+        pending_send_time_ = 0;
+    }
 }
 
+// 🔥 核心修复：就近匹配算法，将连续值映射到最近的固定档位
+std::string BLELight::map_brightness(float brightness) {
+    // 定义固定的亮度档位（0.0 - 1.0）
+    const float levels[] = {0.01f, 0.20f, 0.40f, 0.50f, 0.60f, 0.80f, 1.00f};
+    const char* actions[] = {"brightness_1", "brightness_20", "brightness_40", 
+                             "brightness_50", "brightness_60", "brightness_80", "brightness_100"};
+    const int num_levels = sizeof(levels) / sizeof(levels[0]);
+    
+    // 找到距离最近的档位
+    float min_diff = 999.0f;
+    int closest_idx = 0;
+    
+    for (int i = 0; i < num_levels; i++) {
+        float diff = std::abs(brightness - levels[i]);
+        if (diff < min_diff) {
+            min_diff = diff;
+            closest_idx = i;
+        }
+    }
+    
+    ESP_LOGD(TAG, "Brightness %.2f -> mapped to %s (%.0f%%)", 
+             brightness, actions[closest_idx], levels[closest_idx] * 100);
+    
+    return actions[closest_idx];
+}
+
+// 🔥 核心修复：就近匹配算法，将连续色温映射到最近的固定档位
 std::string BLELight::map_color_temp(float mireds) {
-    if (mireds < 200.0f) return "color_6500";
-    if (mireds < 280.0f) return "color_3500";
-    return "color_2700";
+    // 定义固定的色温档位（mireds）
+    // 2700K = 370 mireds, 3500K = 285 mireds, 6500K = 153 mireds
+    const float levels[] = {370.0f, 285.0f, 153.0f};
+    const char* actions[] = {"color_2700", "color_3500", "color_6500"};
+    const int num_levels = sizeof(levels) / sizeof(levels[0]);
+    
+    // 找到距离最近的档位
+    float min_diff = 999.0f;
+    int closest_idx = 0;
+    
+    for (int i = 0; i < num_levels; i++) {
+        float diff = std::abs(mireds - levels[i]);
+        if (diff < min_diff) {
+            min_diff = diff;
+            closest_idx = i;
+        }
+    }
+    
+    ESP_LOGD(TAG, "Color temp %.1f mireds -> mapped to %s (%.0f mireds)", 
+             mireds, actions[closest_idx], levels[closest_idx]);
+    
+    return actions[closest_idx];
 }
 
 }  // namespace ble_light
