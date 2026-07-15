@@ -61,15 +61,18 @@ void BLELight::write_state(light::LightState *state) {
     } else {
         // 开灯或调节：
         if (!is_currently_on_) {
-            // 从关 -> 开，先发 on，再延迟发 brightness/color
+            // 🔥 核心修复：从关 -> 开，利用智能队列，连续发送 on 和 brightness/color
+            // 网关会自动将它们按顺序排队发送，不会互相覆盖！
             gateway_->send_command(device_id_, "on");
             
-            // 标记延迟发送（200ms 后发送 brightness/color）
-            pending_brightness_ = target_bright_action;
-            pending_color_ = target_temp_action;
-            pending_send_time_ = now + 200;
-            
-            ESP_LOGD(TAG, "Scheduled brightness/color send in 200ms");
+            // 如果亮度不是默认的 1%，则发送亮度指令
+            if (target_bright_action != "brightness_1") {
+                gateway_->send_command(device_id_, target_bright_action);
+            }
+            // 如果色温不是默认的 6500K，则发送色温指令
+            if (target_temp_action != "color_6500") {
+                gateway_->send_command(device_id_, target_temp_action);
+            }
         } else {
             // 已经是开着的：只发变化了的参数
             if (target_temp_action != last_color_temp_action_) {
@@ -88,31 +91,13 @@ void BLELight::write_state(light::LightState *state) {
     last_send_time_         = now;
 }
 
-void BLELight::loop() {
-    if (pending_send_time_ > 0 && millis() >= pending_send_time_) {
-        if (!pending_brightness_.empty()) {
-            gateway_->send_command(device_id_, pending_brightness_);
-            ESP_LOGD(TAG, "Delayed send: %s", pending_brightness_.c_str());
-            pending_brightness_ = "";
-        }
-        if (!pending_color_.empty()) {
-            gateway_->send_command(device_id_, pending_color_);
-            ESP_LOGD(TAG, "Delayed send: %s", pending_color_.c_str());
-            pending_color_ = "";
-        }
-        pending_send_time_ = 0;
-    }
-}
-
-// 🔥 核心修复：就近匹配算法，将连续值映射到最近的固定档位
+// 🔥 就近匹配算法：亮度
 std::string BLELight::map_brightness(float brightness) {
-    // 定义固定的亮度档位（0.0 - 1.0）
     const float levels[] = {0.01f, 0.20f, 0.40f, 0.50f, 0.60f, 0.80f, 1.00f};
     const char* actions[] = {"brightness_1", "brightness_20", "brightness_40", 
                              "brightness_50", "brightness_60", "brightness_80", "brightness_100"};
     const int num_levels = sizeof(levels) / sizeof(levels[0]);
     
-    // 找到距离最近的档位
     float min_diff = 999.0f;
     int closest_idx = 0;
     
@@ -123,22 +108,15 @@ std::string BLELight::map_brightness(float brightness) {
             closest_idx = i;
         }
     }
-    
-    ESP_LOGD(TAG, "Brightness %.2f -> mapped to %s (%.0f%%)", 
-             brightness, actions[closest_idx], levels[closest_idx] * 100);
-    
     return actions[closest_idx];
 }
 
-// 🔥 核心修复：就近匹配算法，将连续色温映射到最近的固定档位
+// 🔥 就近匹配算法：色温
 std::string BLELight::map_color_temp(float mireds) {
-    // 定义固定的色温档位（mireds）
-    // 2700K = 370 mireds, 3500K = 285 mireds, 6500K = 153 mireds
     const float levels[] = {370.0f, 285.0f, 153.0f};
     const char* actions[] = {"color_2700", "color_3500", "color_6500"};
     const int num_levels = sizeof(levels) / sizeof(levels[0]);
     
-    // 找到距离最近的档位
     float min_diff = 999.0f;
     int closest_idx = 0;
     
@@ -149,10 +127,6 @@ std::string BLELight::map_color_temp(float mireds) {
             closest_idx = i;
         }
     }
-    
-    ESP_LOGD(TAG, "Color temp %.1f mireds -> mapped to %s (%.0f mireds)", 
-             mireds, actions[closest_idx], levels[closest_idx]);
-    
     return actions[closest_idx];
 }
 
