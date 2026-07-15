@@ -1,6 +1,6 @@
 {
   "id": "device.kt",
   "name": "客厅风扇灯",
-  "mac": "00:00:70:38:AB:CD"
+  "mac": "00:00:70:38:AB:CD",
   "protocol": "8153"
 }
