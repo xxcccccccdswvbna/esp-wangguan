@@ -25,10 +25,11 @@ protected:
     static std::string map_brightness(float brightness);
     static std::string map_color_temp(float mireds);
 
+    // 🔥 核心修复：更新缓存变量名，打破 HA "未知" 状态死锁
     uint32_t    last_send_time_{0};
-    std::string last_brightness_action_;
-    std::string last_color_temp_action_;
-    bool        is_currently_on_{false};
+    bool        last_sent_on_{false};
+    std::string last_sent_brightness_;
+    std::string last_sent_color_;
 };
 
 }  // namespace ble_light
