@@ -7,7 +7,7 @@ from pathlib import Path
 # 🔥 核心配置区：在这里修改基础名字！
 # 如果改为 "mygw"，则会生成 mygw1.yaml, mygw2.yaml, mygw3.yaml, mygw4.yaml
 # ==============================================================================
-PROJECT_PREFIX = "ct"  
+PROJECT_PREFIX = "vt"  
 # ==============================================================================
 
 def clean_hex(hex_str):
@@ -60,7 +60,7 @@ def generate_all(config_dir: Path, base_dir: Path):
         devices.append(data)
         print(f"  OK: {dev_id} (protocol: {data['protocol']})")
 
-    # 2. 生成全局 C++ device_table.cpp (包含所有设备)
+    # 2. 生成全局 C++ device_table.cpp
     cpp = ['#include "device_table.h"', '#include "esphome/core/log.h"', "", "namespace esphome {", "namespace ble_gateway {", "", "static const char *TAG = \"device_table\";", "", "void DeviceTable::load(std::vector<BLEDevice> &devices) {"]
     for dev in devices:
         name = get_english_name(dev["id"])
@@ -82,7 +82,7 @@ def generate_all(config_dir: Path, base_dir: Path):
     ]
     (base_dir / "components" / "ble_gateway" / "device_table.cpp").write_text("\n".join(cpp))
 
-    # 3. 生成全局实体列表 (所有 4 个固件都会包含这些设备)
+    # 3. 生成全局实体列表
     sections = {"binary_sensor": [], "sensor": [], "text_sensor": [], "button": [], "light": [], "fan": []}
     sections["sensor"].append('  - platform: uptime\n    name: "Gateway Uptime"\n  - platform: internal_temperature\n    name: "ESP32 Chip Temperature"\n    unit_of_measurement: "°C"\n    accuracy_decimals: 1\n  - platform: wifi_signal\n    name: "WiFi Signal dBm"\n    id: wifi_signal_db\n    update_interval: 60s\n  - platform: copy\n    source_id: wifi_signal_db\n    name: "WiFi Signal Percent"\n    filters:\n      - lambda: return min(max(2*(x+100.0),0.0),100.0);\n    unit_of_measurement: "%"\n    icon: mdi:wifi-strength-4')
     sections["text_sensor"].append('  - platform: wifi_info\n    ip_address:\n      name: "ESP IP Address"\n    ssid:\n      name: "ESP Connected SSID"\n    bssid:\n      name: "ESP Connected BSSID"')
@@ -99,7 +99,7 @@ def generate_all(config_dir: Path, base_dir: Path):
         if "fan" in dev:
             sections["fan"].append(f'  - platform: ble_fan\n    id: {sid}_fan_ctrl\n    name: "{name} Fan"\n    ble_device_id: "{dev["fan"]["id"]}"\n    gateway: ct1_ble')
 
-    # 4. 生成全局 BLE Tracker (包含所有 8153 和 134D 协议解析)
+    # 4. 生成全局 BLE Tracker
     dev_8153 = [d for d in devices if d["protocol"] == "8153"]
     dev_134d = [d for d in devices if d["protocol"] == "134D"]
 
@@ -182,7 +182,7 @@ def generate_all(config_dir: Path, base_dir: Path):
 """
     tracker += "            }\n"
 
-    # 5. 定义基础模板 (🔥 统一开启满血蓝牙代理)
+    # 5. 基础模板 (统一满血蓝牙代理)
     base_template = f"""esphome:
   name: {{name}}
   friendly_name: {{fn}}
@@ -218,7 +218,6 @@ external_components:
 ble_gateway:
   id: ct1_ble
 
-# 🔥 核心升级：所有 4 个固件统一开启完整的主动蓝牙代理功能
 esp32_ble:
   io_capability: none
   enable_on_boot: true
@@ -227,41 +226,20 @@ bluetooth_proxy:
   cache_services: true
 """
 
-    def write_yaml(filename, name, fn, extra_yaml=""):
-        content = base_template.format(name=name, fn=fn)
-        
-        # 添加全局实体
-        for key in ("binary_sensor", "sensor", "text_sensor", "button", "light", "fan"):
-            if sections[key]:
-                content += f"{key}:\n" + "\n".join(sections[key]) + "\n\n"
-        
-        # 添加特定版本的额外配置 (如 MQTT 或 Pro 硬件)
-        content += extra_yaml + "\n" + tracker
-        (base_dir / filename).write_text(content)
+    # 🔥 核心修复：将 Pro 版的硬件配置定义为“列表项”，而不是完整的 YAML 块
+    pro_keys_list = [
+        '  - platform: gpio\n    id: key1\n    name: KEY1\n    pin: { number: GPIO34, inverted: true }\n    filters: [delayed_on: 20ms, delayed_off: 20ms]\n    on_multi_click:\n      - timing: [ON for at least 8s]\n        then:\n          - if: { condition: { binary_sensor.is_on: key4 }, then: [delay: 500ms, if: { condition: { binary_sensor.is_on: key4 }, then: [lambda: \'id(do_factory_reset)=true;\', repeat: { count: 5, then: [light.toggle: white_led, delay: 100ms] }, lambda: \'App.reboot();\'] }]}\n      - timing: [ON for at least 1.5s]\n        then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key1", mode: "long" } }]\n      - timing: [ON for at most 0.5s, OFF for at most 0.3s, ON for at most 0.5s, OFF for at least 0.3s]\n        then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key1", mode: "double" } }]\n      - timing: [ON for at most 0.5s, OFF for at least 0.3s]\n        then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key1", mode: "single" } }]',
+        '  - platform: gpio\n    id: key2\n    name: KEY2\n    pin: { number: GPIO35, inverted: true }\n    filters: [delayed_on: 20ms, delayed_off: 20ms]\n    on_multi_click:\n      - timing: [ON for at least 1.5s]\n        then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key2", mode: "long" } }]\n      - timing: [ON for at most 0.5s, OFF for at least 0.3s]\n        then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key2", mode: "single" } }]',
+        '  - platform: gpio\n    id: key3\n    name: KEY3\n    pin: { number: GPIO32, inverted: true }\n    filters: [delayed_on: 20ms, delayed_off: 20ms]\n    on_multi_click:\n      - timing: [ON for at least 1.5s]\n        then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key3", mode: "long" } }]\n      - timing: [ON for at most 0.5s, OFF for at least 0.3s]\n        then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key3", mode: "single" } }]',
+        '  - platform: gpio\n    id: key4\n    name: KEY4\n    pin: { number: GPIO33, inverted: true }\n    filters: [delayed_on: 20ms, delayed_off: 20ms]\n    on_multi_click:\n      - timing: [ON for at least 1.5s]\n        then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key4", mode: "long" } }]\n      - timing: [ON for at most 0.5s, OFF for at least 0.3s]\n        then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key4", mode: "single" } }]'
+    ]
 
-    # 6. 生成 4 个固件 (基于 PROJECT_PREFIX 动态命名)
-    prefix = PROJECT_PREFIX
-    
-    # 固件 1: Lite (基础 + 满血蓝牙代理)
-    write_yaml(f"{prefix}1.yaml", f"{prefix}1", f"{prefix}1 Lite")
-    
-    # 固件 2: Full (基础 + 满血蓝牙代理 + MQTT)
-    mqtt_extra = """mqtt:
-  broker: "192.168.6.88"
-  discovery: true
-  on_message:
-    - topic: "{}/ble/send"
-      then:
-        - lambda: |-
-            id(ct1_ble).send_hex(x);
-""".format(prefix + "2")
-    write_yaml(f"{prefix}2.yaml", f"{prefix}2", f"{prefix}2 Full", mqtt_extra)
-    
-    # 固件 3: Custom (基础 + 满血蓝牙代理 + 预留扩展位)
-    write_yaml(f"{prefix}3.yaml", f"{prefix}3", f"{prefix}3 Custom")
-    
-    # 固件 4: Pro (基础 + 满血蓝牙代理 + 物理按键 + LED)
-    pro_extra = """
+    pro_leds_list = [
+        '  - platform: binary\n    name: Blue LED\n    id: blue_led\n    output: blue_led_out\n    restore_mode: RESTORE_DEFAULT_OFF',
+        '  - platform: binary\n    name: White LED\n    id: white_led\n    output: white_led_out\n    restore_mode: RESTORE_DEFAULT_OFF'
+    ]
+
+    pro_extras_yaml = """
 globals:
   - id: do_factory_reset
     type: bool
@@ -285,69 +263,61 @@ output:
   - platform: gpio
     id: white_led_out
     pin: { number: GPIO26, inverted: true }
-
-binary_sensor:
-  - platform: gpio
-    id: key1
-    name: KEY1
-    pin: { number: GPIO34, inverted: true }
-    filters: [delayed_on: 20ms, delayed_off: 20ms]
-    on_multi_click:
-      - timing: [ON for at least 8s]
-        then:
-          - if: { condition: { binary_sensor.is_on: key4 }, then: [delay: 500ms, if: { condition: { binary_sensor.is_on: key4 }, then: [lambda: 'id(do_factory_reset)=true;', repeat: { count: 5, then: [light.toggle: white_led, delay: 100ms] }, lambda: 'App.reboot();'] }]}
-      - timing: [ON for at least 1.5s]
-        then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key1", mode: "long" } }]
-      - timing: [ON for at most 0.5s, OFF for at most 0.3s, ON for at most 0.5s, OFF for at least 0.3s]
-        then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key1", mode: "double" } }]
-      - timing: [ON for at most 0.5s, OFF for at least 0.3s]
-        then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key1", mode: "single" } }]
-  - platform: gpio
-    id: key2
-    name: KEY2
-    pin: { number: GPIO35, inverted: true }
-    filters: [delayed_on: 20ms, delayed_off: 20ms]
-    on_multi_click:
-      - timing: [ON for at least 1.5s]
-        then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key2", mode: "long" } }]
-      - timing: [ON for at most 0.5s, OFF for at least 0.3s]
-        then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key2", mode: "single" } }]
-  - platform: gpio
-    id: key3
-    name: KEY3
-    pin: { number: GPIO32, inverted: true }
-    filters: [delayed_on: 20ms, delayed_off: 20ms]
-    on_multi_click:
-      - timing: [ON for at least 1.5s]
-        then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key3", mode: "long" } }]
-      - timing: [ON for at most 0.5s, OFF for at least 0.3s]
-        then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key3", mode: "single" } }]
-  - platform: gpio
-    id: key4
-    name: KEY4
-    pin: { number: GPIO33, inverted: true }
-    filters: [delayed_on: 20ms, delayed_off: 20ms]
-    on_multi_click:
-      - timing: [ON for at least 1.5s]
-        then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key4", mode: "long" } }]
-      - timing: [ON for at most 0.5s, OFF for at least 0.3s]
-        then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key4", mode: "single" } }]
-
-light:
-  - platform: binary
-    name: Blue LED
-    id: blue_led
-    output: blue_led_out
-    restore_mode: RESTORE_DEFAULT_OFF
-  - platform: binary
-    name: White LED
-    id: white_led
-    output: white_led_out
-    restore_mode: RESTORE_DEFAULT_OFF
 """
-    write_yaml(f"{prefix}4.yaml", f"{prefix}4", f"{prefix}4 Pro", pro_extra)
 
-    print(f"✅ Successfully generated {prefix}1.yaml, {prefix}2.yaml, {prefix}3.yaml, {prefix}4.yaml with unified Bluetooth Proxy.")
+    # 🔥 核心修复：智能合并列表，确保顶层键绝对不重复
+    def write_yaml(filename, name, fn, extra_yaml="", is_pro=False):
+        content = base_template.format(name=name, fn=fn)
+        
+        # 1. 合并 binary_sensor
+        bs_items = list(sections["binary_sensor"])
+        if is_pro:
+            bs_items.extend(pro_keys_list)
+        if bs_items:
+            content += f"binary_sensor:\n" + "\n".join(bs_items) + "\n\n"
+            
+        # 2. 常规 sections
+        for key in ("sensor", "text_sensor", "button", "fan"):
+            if sections[key]:
+                content += f"{key}:\n" + "\n".join(sections[key]) + "\n\n"
+                
+        # 3. 合并 light
+        light_items = list(sections["light"])
+        if is_pro:
+            light_items.extend(pro_leds_list)
+        if light_items:
+            content += f"light:\n" + "\n".join(light_items) + "\n\n"
+            
+        # 4. Pro 专属的 globals/script/output
+        if is_pro:
+            content += pro_extras_yaml + "\n"
+            
+        # 5. 额外配置 (如 MQTT) 和 Tracker
+        content += extra_yaml + "\n" + tracker
+        (base_dir / filename).write_text(content)
+
+    # 6. 生成 4 个固件
+    prefix = PROJECT_PREFIX
+    
+    write_yaml(f"{prefix}1.yaml", f"{prefix}1", f"{prefix}1 Lite")
+    
+    mqtt_extra = """mqtt:
+  broker: "192.168.6.88"
+  discovery: true
+  on_message:
+    - topic: "{}/ble/send"
+      then:
+        - lambda: |-
+            id(ct1_ble).send_hex(x);
+""".format(prefix + "2")
+    write_yaml(f"{prefix}2.yaml", f"{prefix}2", f"{prefix}2 Full", mqtt_extra)
+    
+    write_yaml(f"{prefix}3.yaml", f"{prefix}3", f"{prefix}3 Custom")
+    
+    # 🔥 生成 Pro 版时，传入 is_pro=True
+    write_yaml(f"{prefix}4.yaml", f"{prefix}4", f"{prefix}4 Pro", is_pro=True)
+
+    print(f"✅ Successfully generated {prefix}1~4.yaml with unified Bluetooth Proxy and fixed YAML structure.")
 
 if __name__ == "__main__":
     base = Path(__file__).resolve().parent
