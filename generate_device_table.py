@@ -3,6 +3,13 @@ import os
 import glob
 from pathlib import Path
 
+# ==============================================================================
+# 🔥 核心配置区：在这里修改基础名字！
+# 如果改为 "mygw"，则会生成 mygw1.yaml, mygw2.yaml, mygw3.yaml, mygw4.yaml
+# ==============================================================================
+PROJECT_PREFIX = "ct"  
+# ==============================================================================
+
 def clean_hex(hex_str):
     return str(hex_str).strip().replace(" ", "").replace("0x", "").replace("0X", "").upper()
 
@@ -19,6 +26,7 @@ def generate_all(config_dir: Path, base_dir: Path):
     devices, used_dev_ids = [], set()
     used_light_ids, used_fan_ids = set(), set()
 
+    # 1. 读取并校验所有 JSON 设备
     for jf in json_files:
         try:
             with open(jf, "r", encoding="utf-8") as f:
@@ -52,7 +60,7 @@ def generate_all(config_dir: Path, base_dir: Path):
         devices.append(data)
         print(f"  OK: {dev_id} (protocol: {data['protocol']})")
 
-    # ========== 1. C++ device_table.cpp ==========
+    # 2. 生成全局 C++ device_table.cpp (包含所有设备)
     cpp = ['#include "device_table.h"', '#include "esphome/core/log.h"', "", "namespace esphome {", "namespace ble_gateway {", "", "static const char *TAG = \"device_table\";", "", "void DeviceTable::load(std::vector<BLEDevice> &devices) {"]
     for dev in devices:
         name = get_english_name(dev["id"])
@@ -74,7 +82,7 @@ def generate_all(config_dir: Path, base_dir: Path):
     ]
     (base_dir / "components" / "ble_gateway" / "device_table.cpp").write_text("\n".join(cpp))
 
-    # ========== 2. 实体列表 ==========
+    # 3. 生成全局实体列表 (所有 4 个固件都会包含这些设备)
     sections = {"binary_sensor": [], "sensor": [], "text_sensor": [], "button": [], "light": [], "fan": []}
     sections["sensor"].append('  - platform: uptime\n    name: "Gateway Uptime"\n  - platform: internal_temperature\n    name: "ESP32 Chip Temperature"\n    unit_of_measurement: "°C"\n    accuracy_decimals: 1\n  - platform: wifi_signal\n    name: "WiFi Signal dBm"\n    id: wifi_signal_db\n    update_interval: 60s\n  - platform: copy\n    source_id: wifi_signal_db\n    name: "WiFi Signal Percent"\n    filters:\n      - lambda: return min(max(2*(x+100.0),0.0),100.0);\n    unit_of_measurement: "%"\n    icon: mdi:wifi-strength-4')
     sections["text_sensor"].append('  - platform: wifi_info\n    ip_address:\n      name: "ESP IP Address"\n    ssid:\n      name: "ESP Connected SSID"\n    bssid:\n      name: "ESP Connected BSSID"')
@@ -91,7 +99,7 @@ def generate_all(config_dir: Path, base_dir: Path):
         if "fan" in dev:
             sections["fan"].append(f'  - platform: ble_fan\n    id: {sid}_fan_ctrl\n    name: "{name} Fan"\n    ble_device_id: "{dev["fan"]["id"]}"\n    gateway: ct1_ble')
 
-    # ========== 3. BLE Tracker ==========
+    # 4. 生成全局 BLE Tracker (包含所有 8153 和 134D 协议解析)
     dev_8153 = [d for d in devices if d["protocol"] == "8153"]
     dev_134d = [d for d in devices if d["protocol"] == "134D"]
 
@@ -174,10 +182,10 @@ def generate_all(config_dir: Path, base_dir: Path):
 """
     tracker += "            }\n"
 
-    # ========== 4. 写入 CT1, CT2, CT3 ==========
-    base = """esphome:
-  name: {name}
-  friendly_name: {fn}
+    # 5. 定义基础模板 (🔥 统一开启满血蓝牙代理)
+    base_template = f"""esphome:
+  name: {{name}}
+  friendly_name: {{fn}}
 esp32:
   board: esp32dev
   flash_size: 4MB
@@ -195,7 +203,7 @@ wifi:
   fast_connect: true
   power_save_mode: none
   ap:
-    ssid: "CT1 Fallback"
+    ssid: "{{name}} Fallback"
     password: "12345678"
 captive_portal:
 web_server:
@@ -209,64 +217,51 @@ external_components:
       path: components
 ble_gateway:
   id: ct1_ble
-"""
-    def write(fn, hdr, extra=""):
-        c = hdr
-        for key in ("binary_sensor", "sensor", "text_sensor", "button", "light", "fan"):
-            if sections[key]: c += f"{key}:\n" + "\n".join(sections[key]) + "\n\n"
-        c += extra + "\n" + tracker
-        (base_dir / fn).write_text(c)
 
-    write("ct1.yaml", base.format(name="ct1", fn="CT1 Lite"))
-    write("ct2.yaml", base.format(name="ct2", fn="CT2 Full"), extra='\nmqtt:\n  broker: "192.168.6.88"\n  discovery: true\n  on_message:\n    - topic: "ct2/ble/send"\n      then:\n        - lambda: |-\n            id(ct1_ble).send_hex(x);\nbluetooth_proxy:\n  active: false\n')
-    write("ct3.yaml", base.format(name="ct3", fn="CT3 Custom"))
-
-    # ========== 5. 完整写入 CT4 (Pro 专属版，无任何省略) ==========
-    ct4_header = """esphome:
-  name: ct4
-  friendly_name: CT4 Pro
-  on_boot:
-    priority: 600.0
-    then:
-      - light.turn_on: blue_led
-      - light.turn_on: white_led
-esp32:
-  board: esp32dev
-  flash_size: 4MB
-  framework:
-    type: esp-idf
-    sdkconfig_options:
-      CONFIG_FREERTOS_UNICORE: y
-      CONFIG_BT_ENABLED: y
-      CONFIG_BT_BLE_ENABLED: y
-logger:
-  baud_rate: 0
-wifi:
-  ssid: "CC"
-  password: "chen1122"
-  fast_connect: true
-  power_save_mode: none
-  ap:
-    ssid: "CT1 Fallback"
-    password: "12345678"
-captive_portal:
-web_server:
-api:
-  reboot_timeout: 0s
-  on_client_connected:
-    - script.stop: offline_flash
-    - light.turn_off: white_led
-    - light.turn_off: blue_led
-  on_client_disconnected:
-    - script.execute: offline_flash
-ota:
-  - platform: esphome
+# 🔥 核心升级：所有 4 个固件统一开启完整的主动蓝牙代理功能
 esp32_ble:
   io_capability: none
   enable_on_boot: true
 bluetooth_proxy:
   active: true
   cache_services: true
+"""
+
+    def write_yaml(filename, name, fn, extra_yaml=""):
+        content = base_template.format(name=name, fn=fn)
+        
+        # 添加全局实体
+        for key in ("binary_sensor", "sensor", "text_sensor", "button", "light", "fan"):
+            if sections[key]:
+                content += f"{key}:\n" + "\n".join(sections[key]) + "\n\n"
+        
+        # 添加特定版本的额外配置 (如 MQTT 或 Pro 硬件)
+        content += extra_yaml + "\n" + tracker
+        (base_dir / filename).write_text(content)
+
+    # 6. 生成 4 个固件 (基于 PROJECT_PREFIX 动态命名)
+    prefix = PROJECT_PREFIX
+    
+    # 固件 1: Lite (基础 + 满血蓝牙代理)
+    write_yaml(f"{prefix}1.yaml", f"{prefix}1", f"{prefix}1 Lite")
+    
+    # 固件 2: Full (基础 + 满血蓝牙代理 + MQTT)
+    mqtt_extra = """mqtt:
+  broker: "192.168.6.88"
+  discovery: true
+  on_message:
+    - topic: "{}/ble/send"
+      then:
+        - lambda: |-
+            id(ct1_ble).send_hex(x);
+""".format(prefix + "2")
+    write_yaml(f"{prefix}2.yaml", f"{prefix}2", f"{prefix}2 Full", mqtt_extra)
+    
+    # 固件 3: Custom (基础 + 满血蓝牙代理 + 预留扩展位)
+    write_yaml(f"{prefix}3.yaml", f"{prefix}3", f"{prefix}3 Custom")
+    
+    # 固件 4: Pro (基础 + 满血蓝牙代理 + 物理按键 + LED)
+    pro_extra = """
 globals:
   - id: do_factory_reset
     type: bool
@@ -290,20 +285,8 @@ output:
   - platform: gpio
     id: white_led_out
     pin: { number: GPIO26, inverted: true }
-external_components:
-  - source:
-      type: local
-      path: components
-ble_gateway:
-  id: ct1_ble
-"""
-    
-    ct4_leds = [
-        '  - platform: binary\n    name: Blue LED\n    id: blue_led\n    output: blue_led_out\n    restore_mode: RESTORE_DEFAULT_OFF',
-        '  - platform: binary\n    name: White LED\n    id: white_led\n    output: white_led_out\n    restore_mode: RESTORE_DEFAULT_OFF'
-    ]
-    
-    ct4_keys = """
+
+binary_sensor:
   - platform: gpio
     id: key1
     name: KEY1
@@ -349,23 +332,22 @@ ble_gateway:
         then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key4", mode: "long" } }]
       - timing: [ON for at most 0.5s, OFF for at least 0.3s]
         then: [light.turn_on: blue_led, delay: 200ms, light.turn_off: blue_led, homeassistant.event: { event: esphome.gateway_key, data: { key: "key4", mode: "single" } }]
+
+light:
+  - platform: binary
+    name: Blue LED
+    id: blue_led
+    output: blue_led_out
+    restore_mode: RESTORE_DEFAULT_OFF
+  - platform: binary
+    name: White LED
+    id: white_led
+    output: white_led_out
+    restore_mode: RESTORE_DEFAULT_OFF
 """
+    write_yaml(f"{prefix}4.yaml", f"{prefix}4", f"{prefix}4 Pro", pro_extra)
 
-    c4 = ct4_header
-    bs_content = "\n".join(sections["binary_sensor"]) + ct4_keys if sections["binary_sensor"] else ct4_keys
-    c4 += f"binary_sensor:\n{bs_content}\n\n"
-    if sections["sensor"]: c4 += "sensor:\n" + "\n".join(sections["sensor"]) + "\n\n"
-    if sections["text_sensor"]: c4 += "text_sensor:\n" + "\n".join(sections["text_sensor"]) + "\n\n"
-    if sections["button"]: c4 += "button:\n" + "\n".join(sections["button"]) + "\n\n"
-    
-    all_lights = ct4_leds + sections["light"]
-    if all_lights: c4 += "light:\n" + "\n".join(all_lights) + "\n\n"
-    if sections["fan"]: c4 += "fan:\n" + "\n".join(sections["fan"]) + "\n\n"
-    c4 += tracker
-    
-    (base_dir / "ct4.yaml").write_text(c4)
-
-    print("✅ All 4 YAML files and C++ generated successfully with full CT4 features.")
+    print(f"✅ Successfully generated {prefix}1.yaml, {prefix}2.yaml, {prefix}3.yaml, {prefix}4.yaml with unified Bluetooth Proxy.")
 
 if __name__ == "__main__":
     base = Path(__file__).resolve().parent
