@@ -15,13 +15,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [ct1, ct2, ct3, ct4]
+        # 🔥 核心修改：将 ct 改为 vt，与 Python 脚本中的 PROJECT_PREFIX 保持一致
+        target: [vt1, vt2, vt3, vt4]
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          # 需要 2 个 commit 才能 diff, 拉全量历史给 log 用
           fetch-depth: 0
 
       - name: Setup Python
@@ -30,7 +30,7 @@ jobs:
           python-version: "3.11"
 
       # ------------------------------------------------------------------
-      # 时间戳 + git 元数据 (供文件名和 release body 使用)
+      # 时间戳 + git 元数据
       # ------------------------------------------------------------------
       - name: Collect build metadata
         id: meta
@@ -39,7 +39,6 @@ jobs:
           echo "TITLE_TIME=$(date +'%Y-%m-%d %H:%M:%S')"  >> $GITHUB_ENV
           echo "SHORT_SHA=$(git rev-parse --short HEAD)"  >> $GITHUB_ENV
 
-          # 最近一次提交
           {
             echo 'COMMIT_MSG<<__EOF__'
             git log -1 --pretty=format:'%s%n%n%b'
@@ -47,7 +46,6 @@ jobs:
             echo '__EOF__'
           } >> $GITHUB_ENV
 
-          # 本次 push 涉及的文件 (相对上一个 commit)
           {
             echo 'CHANGED_FILES<<__EOF__'
             git diff --name-status HEAD~1 HEAD 2>/dev/null || echo "(initial commit)"
@@ -62,11 +60,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install esphome
 
+      # 🔥 这里会自动变成 esphome compile vt1.yaml, vt2.yaml...
       - name: Compile ${{ matrix.target }}
         run: esphome compile ${{ matrix.target }}.yaml
 
       # ------------------------------------------------------------------
-      # 收集产物: 文件名带 target + 时间戳 + 短 SHA
+      # 收集产物
       # ------------------------------------------------------------------
       - name: Collect Firmware for ${{ matrix.target }}
         if: success()
@@ -91,12 +90,13 @@ jobs:
           ls -lh "$OUT"
 
       # ------------------------------------------------------------------
-      # 版本化 Release: <target>-v<run>-<time>-<sha>
+      # 版本化 Release
       # ------------------------------------------------------------------
       - name: Create versioned Release for ${{ matrix.target }}
         if: success()
         uses: softprops/action-gh-release@v2
         with:
+          # 🔥 自动变成 vt1-v12-20260715...
           tag_name: ${{ matrix.target }}-v${{ github.run_number }}-${{ env.TAG_TIME }}-${{ env.SHORT_SHA }}
           name: "${{ matrix.target }} #${{ github.run_number }} · ${{ env.TITLE_TIME }} · ${{ env.SHORT_SHA }}"
           body: |
@@ -132,12 +132,13 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # ------------------------------------------------------------------
-      # 滚动 "latest" Release: 每个 target 一个固定入口
+      # 滚动 "latest" Release
       # ------------------------------------------------------------------
       - name: Update rolling "latest" Release for ${{ matrix.target }}
         if: success()
         uses: softprops/action-gh-release@v2
         with:
+          # 🔥 自动变成 vt1-latest, vt2-latest...
           tag_name: ${{ matrix.target }}-latest
           name: "${{ matrix.target }} · latest (${{ env.TITLE_TIME }})"
           body: |
@@ -148,7 +149,6 @@ jobs:
             - Run: #${{ github.run_number }}
             - 详细版本: [${{ matrix.target }}-v${{ github.run_number }}-${{ env.TAG_TIME }}-${{ env.SHORT_SHA }}](${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ matrix.target }}-v${{ github.run_number }}-${{ env.TAG_TIME }}-${{ env.SHORT_SHA }})
           files: firmware/*
-          # 关键: 覆盖同名 tag, 让 "latest" 永远指向最新
           make_latest: "false"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
