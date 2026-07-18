@@ -1,4 +1,4 @@
-name: Build and Release Firmware (Matrix Parallel)
+name: Build and Release Firmware (Dynamic Matrix)
 
 on:
   push:
@@ -10,13 +10,45 @@ permissions:
   contents: write
 
 jobs:
+  # ---------------------------------------------------------
+  # Job 1: 动态扫描生成的 YAML 文件，构建 Matrix
+  # ---------------------------------------------------------
+  prepare-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      targets: ${{ steps.scan.outputs.targets }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Generate Configs from JSON
+        run: python3 generate_device_table.py
+
+      - name: Scan generated YAMLs
+        id: scan
+        run: |
+          # 获取根目录下所有 .yaml 文件，去掉 .yaml 后缀，转为 JSON 数组
+          # 例如: ["vt1", "vt2", "vt3", "vt4"]
+          TARGETS=$(ls *.yaml 2>/dev/null | sed 's/\.yaml$//' | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          echo "Found targets: $TARGETS"
+          echo "targets=$TARGETS" >> $GITHUB_OUTPUT
+
+  # ---------------------------------------------------------
+  # Job 2: 并行编译、收集、发布
+  # ---------------------------------------------------------
   build-and-release:
+    needs: prepare-matrix
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        # 🔥 核心修改：将 ct 改为 vt，与 Python 脚本中的 PROJECT_PREFIX 保持一致
-        target: [vt1, vt2, vt3, vt4]
+        # 🔥 核心：动态接收上一步扫描到的文件列表
+        target: ${{ fromJson(needs.prepare-matrix.outputs.targets) }}
 
     steps:
       - name: Checkout repository
@@ -52,6 +84,7 @@ jobs:
             echo '__EOF__'
           } >> $GITHUB_ENV
 
+      # 🔥 重新运行脚本：因为每个 Job 都在全新的虚拟机上，需要重新生成文件
       - name: Generate Configs from JSON
         run: python3 generate_device_table.py
 
@@ -60,7 +93,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install esphome
 
-      # 🔥 这里会自动变成 esphome compile vt1.yaml, vt2.yaml...
       - name: Compile ${{ matrix.target }}
         run: esphome compile ${{ matrix.target }}.yaml
 
@@ -96,7 +128,6 @@ jobs:
         if: success()
         uses: softprops/action-gh-release@v2
         with:
-          # 🔥 自动变成 vt1-v12-20260715...
           tag_name: ${{ matrix.target }}-v${{ github.run_number }}-${{ env.TAG_TIME }}-${{ env.SHORT_SHA }}
           name: "${{ matrix.target }} #${{ github.run_number }} · ${{ env.TITLE_TIME }} · ${{ env.SHORT_SHA }}"
           body: |
@@ -138,7 +169,6 @@ jobs:
         if: success()
         uses: softprops/action-gh-release@v2
         with:
-          # 🔥 自动变成 vt1-latest, vt2-latest...
           tag_name: ${{ matrix.target }}-latest
           name: "${{ matrix.target }} · latest (${{ env.TITLE_TIME }})"
           body: |
