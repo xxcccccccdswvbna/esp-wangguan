@@ -4,7 +4,7 @@ import glob
 from pathlib import Path
 
 # 🔥 新增：在这里修改基础名字
-PROJECT_PREFIX = "ct"
+PROJECT_PREFIX = "gt"
 
 def clean_hex(hex_str):
     return str(hex_str).strip().replace(" ", "").replace("0x", "").replace("0X", "").upper()
