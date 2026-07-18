@@ -9,10 +9,15 @@ static const char *TAG = "ble_light";
 
 light::LightTraits BLELight::get_traits() {
     light::LightTraits traits;
+    
+    // 🔥 核心修复：只声明支持 COLOR_TEMPERATURE。
+    // 在 ESPHome 中，COLOR_TEMPERATURE 模式本身就包含了亮度和色温两个属性。
+    // 移除 BRIGHTNESS 可以防止 LightState 在某些情况下回退到纯亮度模式，
+    // 从而彻底解决 HA 2026.7 抛出的 "unsupported color mode brightness" 异常。
     traits.set_supported_color_modes({
-        light::ColorMode::BRIGHTNESS,
-        light::ColorMode::COLOR_TEMPERATURE,
+        light::ColorMode::COLOR_TEMPERATURE
     });
+    
     traits.set_min_mireds(MIREDS_MIN);
     traits.set_max_mireds(MIREDS_MAX);
     return traits;
