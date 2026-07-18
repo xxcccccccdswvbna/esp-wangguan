@@ -1,4 +1,4 @@
-name: Build and Release Firmware (Dynamic Matrix)
+name: Build and Release Firmware (Smart Prefix)
 
 on:
   push:
@@ -11,31 +11,35 @@ permissions:
 
 jobs:
   # ---------------------------------------------------------
-  # Job 1: 动态扫描生成的 YAML 文件，构建 Matrix
+  # Job 1: 智能读取 Python 脚本中的 PROJECT_PREFIX，构建 Matrix
   # ---------------------------------------------------------
   prepare-matrix:
     runs-on: ubuntu-latest
     outputs:
-      targets: ${{ steps.scan.outputs.targets }}
+      targets: ${{ steps.get_prefix.outputs.targets }}
+      prefix: ${{ steps.get_prefix.outputs.prefix }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Generate Configs from JSON
-        run: python3 generate_device_table.py
-
-      - name: Scan generated YAMLs
-        id: scan
+      - name: Extract PROJECT_PREFIX from Python script
+        id: get_prefix
         run: |
-          # 获取根目录下所有 .yaml 文件，去掉 .yaml 后缀，转为 JSON 数组
-          # 例如: ["vt1", "vt2", "vt3", "vt4"]
-          TARGETS=$(ls *.yaml 2>/dev/null | sed 's/\.yaml$//' | jq -R -s -c 'split("\n") | map(select(length > 0))')
-          echo "Found targets: $TARGETS"
+          # 🔥 核心魔法：直接从 generate_device_table.py 中提取 PROJECT_PREFIX 的值
+          # 只要你的 Python 代码里写着 PROJECT_PREFIX = "xxx"，这里就能精准提取出 xxx
+          PREFIX=$(grep 'PROJECT_PREFIX = ' generate_device_table.py | cut -d'"' -f2)
+          
+          if [ -z "$PREFIX" ]; then
+            echo "❌ Error: Could not find PROJECT_PREFIX in generate_device_table.py"
+            exit 1
+          fi
+          
+          echo "✅ Extracted prefix: $PREFIX"
+          echo "prefix=$PREFIX" >> $GITHUB_OUTPUT
+          
+          # 自动拼接成 JSON 数组格式，例如: ["gt1", "gt2", "gt3", "gt4"]
+          TARGETS="[\"${PREFIX}1\", \"${PREFIX}2\", \"${PREFIX}3\", \"${PREFIX}4\"]"
+          echo "🚀 Generated targets: $TARGETS"
           echo "targets=$TARGETS" >> $GITHUB_OUTPUT
 
   # ---------------------------------------------------------
@@ -47,7 +51,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 🔥 核心：动态接收上一步扫描到的文件列表
+        # 🔥 动态接收上一步提取并生成的 target 列表
         target: ${{ fromJson(needs.prepare-matrix.outputs.targets) }}
 
     steps:
@@ -84,7 +88,7 @@ jobs:
             echo '__EOF__'
           } >> $GITHUB_ENV
 
-      # 🔥 重新运行脚本：因为每个 Job 都在全新的虚拟机上，需要重新生成文件
+      # 🔥 重新运行脚本生成 yaml
       - name: Generate Configs from JSON
         run: python3 generate_device_table.py
 
