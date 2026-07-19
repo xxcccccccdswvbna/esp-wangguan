@@ -4,7 +4,7 @@ import glob
 from pathlib import Path
 
 # 🔥 核心配置区：在这里修改基础名字 (确保整个文件只有这一处)
-PROJECT_PREFIX = "vt"
+PROJECT_PREFIX = "ct"
 
 def clean_hex(hex_str):
     return str(hex_str).strip().replace(" ", "").replace("0x", "").replace("0X", "").upper()
