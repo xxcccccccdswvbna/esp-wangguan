@@ -25,17 +25,23 @@ jobs:
       - name: Extract PROJECT_PREFIX from Python script
         id: get_prefix
         run: |
-          # 🔥 核心魔法：直接从 generate_device_table.py 中提取 PROJECT_PREFIX 的值
-          # 只要你的 Python 代码里写着 PROJECT_PREFIX = "xxx"，这里就能精准提取出 xxx
-          PREFIX=$(grep 'PROJECT_PREFIX = ' generate_device_table.py | cut -d'"' -f2)
+          # 🔥 核心修复：加上 head -n 1，确保只读取第一行，防止文件里有多个同名变量导致换行符报错
+          PREFIX=$(grep 'PROJECT_PREFIX = "' generate_device_table.py | head -n 1 | cut -d'"' -f2)
           
           if [ -z "$PREFIX" ]; then
             echo "❌ Error: Could not find PROJECT_PREFIX in generate_device_table.py"
             exit 1
           fi
           
+          # 清理可能存在的隐藏回车符 (Windows 换行符 \r)
+          PREFIX=$(echo "$PREFIX" | tr -d '\r')
+          
           echo "✅ Extracted prefix: $PREFIX"
           echo "prefix=$PREFIX" >> $GITHUB_OUTPUT
+          
+          TARGETS="[\"${PREFIX}1\", \"${PREFIX}2\", \"${PREFIX}3\", \"${PREFIX}4\"]"
+          echo "🚀 Generated targets: $TARGETS"
+          echo "targets=$TARGETS" >> $GITHUB_OUTPUT
           
           # 自动拼接成 JSON 数组格式，例如: ["gt1", "gt2", "gt3", "gt4"]
           TARGETS="[\"${PREFIX}1\", \"${PREFIX}2\", \"${PREFIX}3\", \"${PREFIX}4\"]"
