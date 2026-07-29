@@ -3,7 +3,7 @@ name: Build and Release Firmware (Smart Prefix)
 on:
   push:
     branches:
-      - cloud4
+      - hexin2
   workflow_dispatch:
 
 permissions:
