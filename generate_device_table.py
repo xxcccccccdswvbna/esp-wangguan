@@ -4,7 +4,7 @@ import glob
 from pathlib import Path
 
 # 🔥 核心配置区：在这里修改基础名字 (确保整个文件只有这一处)
-PROJECT_PREFIX = "ct"
+PROJECT_PREFIX = "yy"
 
 def clean_hex(hex_str):
     return str(hex_str).strip().replace(" ", "").replace("0x", "").replace("0X", "").upper()
@@ -90,9 +90,10 @@ def generate_all(config_dir: Path, base_dir: Path):
             sections["sensor"] += [f'  - platform: template\n    id: {sid}_brightness\n    name: "{name} Brightness"\n    unit_of_measurement: "%"\n    accuracy_decimals: 0', f'  - platform: template\n    id: {sid}_color_temp\n    name: "{name} Color Temp"\n    unit_of_measurement: "K"\n    accuracy_decimals: 0', f'  - platform: template\n    id: {sid}_fan_speed\n    name: "{name} Fan Speed"\n    accuracy_decimals: 0', f'  - platform: template\n    id: {sid}_timer\n    name: "{name} Timer"\n    unit_of_measurement: "min"\n    accuracy_decimals: 0']
             sections["text_sensor"].append(f'  - platform: template\n    id: {sid}_fan_direction\n    name: "{name} Fan Direction"')
         if "light" in dev:
-            sections["light"].append(f'  - platform: ble_light\n    id: {sid}_light_ctrl\n    name: "{name} Light"\n    ble_device_id: "{dev["light"]["id"]}"\n    gateway: {PROJECT_PREFIX}1_ble')
+            # 注意：这里暂时保留 ct1_ble 作为占位符，稍后在 write 函数中动态替换
+            sections["light"].append(f'  - platform: ble_light\n    id: {sid}_light_ctrl\n    name: "{name} Light"\n    ble_device_id: "{dev["light"]["id"]}"\n    gateway: ct1_ble')
         if "fan" in dev:
-            sections["fan"].append(f'  - platform: ble_fan\n    id: {sid}_fan_ctrl\n    name: "{name} Fan"\n    ble_device_id: "{dev["fan"]["id"]}"\n    gateway: {PROJECT_PREFIX}1_ble')
+            sections["fan"].append(f'  - platform: ble_fan\n    id: {sid}_fan_ctrl\n    name: "{name} Fan"\n    ble_device_id: "{dev["fan"]["id"]}"\n    gateway: ct1_ble')
 
     # ========== 3. BLE Tracker ==========
     dev_8153 = [d for d in devices if d["protocol"] == "8153"]
@@ -178,7 +179,6 @@ def generate_all(config_dir: Path, base_dir: Path):
     tracker += "            }\n"
 
     # ========== 4. 写入 1, 2, 3 版本 ==========
-    # 🔥 核心修改：移除了 CONFIG_FREERTOS_UNICORE: y，释放双核性能！
     base = f"""esphome:
   name: {{name}}
   friendly_name: {{fn}}
@@ -204,7 +204,6 @@ captive_portal:
 web_server:
 api:
   reboot_timeout: 0s
-  # 🔥 核心新增：向 HA 注册自定义服务，支持在自动化中直接发送抓包 HEX 数据
   services:
     - service: send_raw_hex
       variables:
@@ -221,7 +220,6 @@ external_components:
 ble_gateway:
   id: {{name}}_ble
 
-# 🔥 满血蓝牙代理（所有版本统一）
 esp32_ble:
   io_capability: none
   enable_on_boot: true
@@ -229,19 +227,22 @@ bluetooth_proxy:
   active: true
   cache_services: true
 """
-    def write(fn, hdr, extra=""):
-        c = hdr
+    # 🔥 核心修复：在 write 函数中，动态替换 light 和 fan 中的 gateway ID
+    def write(fn, name, fn_name, extra=""):
+        c = base.format(name=name, fn=fn_name)
         for key in ("binary_sensor", "sensor", "text_sensor", "button", "light", "fan"):
-            if sections[key]: c += f"{key}:\n" + "\n".join(sections[key]) + "\n\n"
+            if sections[key]: 
+                # 将占位符 ct1_ble 替换为当前固件实际的 gateway ID (例如 ct2_ble)
+                key_content = "\n".join(sections[key]).replace("gateway: ct1_ble", f"gateway: {name}_ble")
+                c += f"{key}:\n" + key_content + "\n\n"
         c += extra + "\n" + tracker
         (base_dir / fn).write_text(c)
 
-    write(f"{PROJECT_PREFIX}1.yaml", base.format(name=f"{PROJECT_PREFIX}1", fn=f"{PROJECT_PREFIX}1 Lite"))
-    write(f"{PROJECT_PREFIX}2.yaml", base.format(name=f"{PROJECT_PREFIX}2", fn=f"{PROJECT_PREFIX}2 Full"), extra=f'\nmqtt:\n  broker: "192.168.6.88"\n  discovery: true\n  on_message:\n    - topic: "{PROJECT_PREFIX}2/ble/send"\n      then:\n        - lambda: |-\n            id({PROJECT_PREFIX}2_ble).send_hex(x);\n')
-    write(f"{PROJECT_PREFIX}3.yaml", base.format(name=f"{PROJECT_PREFIX}3", fn=f"{PROJECT_PREFIX}3 Custom"))
+    write(f"{PROJECT_PREFIX}1.yaml", f"{PROJECT_PREFIX}1", f"{PROJECT_PREFIX}1 Lite")
+    write(f"{PROJECT_PREFIX}2.yaml", f"{PROJECT_PREFIX}2", f"{PROJECT_PREFIX}2 Full", extra=f'\nmqtt:\n  broker: "192.168.6.88"\n  discovery: true\n  on_message:\n    - topic: "{PROJECT_PREFIX}2/ble/send"\n      then:\n        - lambda: |-\n            id({PROJECT_PREFIX}2_ble).send_hex(x);\n')
+    write(f"{PROJECT_PREFIX}3.yaml", f"{PROJECT_PREFIX}3", f"{PROJECT_PREFIX}3 Custom")
 
     # ========== 5. 4 版本 (Pro) ==========
-    # 🔥 核心修改：同样移除了 CONFIG_FREERTOS_UNICORE: y
     ct4_header = f"""esphome:
   name: {PROJECT_PREFIX}4
   friendly_name: {PROJECT_PREFIX}4 Pro
@@ -272,7 +273,6 @@ captive_portal:
 web_server:
 api:
   reboot_timeout: 0s
-  # 🔥 核心新增：向 HA 注册自定义服务，支持在自动化中直接发送抓包 HEX 数据
   services:
     - service: send_raw_hex
       variables:
@@ -385,14 +385,21 @@ ble_gateway:
     if sections["text_sensor"]: c4 += "text_sensor:\n" + "\n".join(sections["text_sensor"]) + "\n\n"
     if sections["button"]: c4 += "button:\n" + "\n".join(sections["button"]) + "\n\n"
     
+    # 🔥 核心修复：同样在这里动态替换 gateway ID
     all_lights = ct4_leds + sections["light"]
-    if all_lights: c4 += "light:\n" + "\n".join(all_lights) + "\n\n"
-    if sections["fan"]: c4 += "fan:\n" + "\n".join(sections["fan"]) + "\n\n"
+    if all_lights: 
+        light_content = "\n".join(all_lights).replace("gateway: ct1_ble", f"gateway: {PROJECT_PREFIX}4_ble")
+        c4 += "light:\n" + light_content + "\n\n"
+        
+    if sections["fan"]: 
+        fan_content = "\n".join(sections["fan"]).replace("gateway: ct1_ble", f"gateway: {PROJECT_PREFIX}4_ble")
+        c4 += "fan:\n" + fan_content + "\n\n"
+        
     c4 += tracker
     
     (base_dir / f"{PROJECT_PREFIX}4.yaml").write_text(c4)
 
-    print(f"✅ All 4 YAML files ({PROJECT_PREFIX}1~4.yaml) generated successfully in DUAL-CORE mode with unified Bluetooth Proxy and send_raw_hex service.")
+    print(f"✅ All 4 YAML files ({PROJECT_PREFIX}1~4.yaml) generated successfully in DUAL-CORE mode with dynamic gateway IDs.")
 
 if __name__ == "__main__":
     base = Path(__file__).resolve().parent
