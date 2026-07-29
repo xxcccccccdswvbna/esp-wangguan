@@ -90,9 +90,9 @@ def generate_all(config_dir: Path, base_dir: Path):
             sections["sensor"] += [f'  - platform: template\n    id: {sid}_brightness\n    name: "{name} Brightness"\n    unit_of_measurement: "%"\n    accuracy_decimals: 0', f'  - platform: template\n    id: {sid}_color_temp\n    name: "{name} Color Temp"\n    unit_of_measurement: "K"\n    accuracy_decimals: 0', f'  - platform: template\n    id: {sid}_fan_speed\n    name: "{name} Fan Speed"\n    accuracy_decimals: 0', f'  - platform: template\n    id: {sid}_timer\n    name: "{name} Timer"\n    unit_of_measurement: "min"\n    accuracy_decimals: 0']
             sections["text_sensor"].append(f'  - platform: template\n    id: {sid}_fan_direction\n    name: "{name} Fan Direction"')
         if "light" in dev:
-            sections["light"].append(f'  - platform: ble_light\n    id: {sid}_light_ctrl\n    name: "{name} Light"\n    ble_device_id: "{dev["light"]["id"]}"\n    gateway: ct1_ble')
+            sections["light"].append(f'  - platform: ble_light\n    id: {sid}_light_ctrl\n    name: "{name} Light"\n    ble_device_id: "{dev["light"]["id"]}"\n    gateway: {PROJECT_PREFIX}1_ble')
         if "fan" in dev:
-            sections["fan"].append(f'  - platform: ble_fan\n    id: {sid}_fan_ctrl\n    name: "{name} Fan"\n    ble_device_id: "{dev["fan"]["id"]}"\n    gateway: ct1_ble')
+            sections["fan"].append(f'  - platform: ble_fan\n    id: {sid}_fan_ctrl\n    name: "{name} Fan"\n    ble_device_id: "{dev["fan"]["id"]}"\n    gateway: {PROJECT_PREFIX}1_ble')
 
     # ========== 3. BLE Tracker ==========
     dev_8153 = [d for d in devices if d["protocol"] == "8153"]
@@ -178,6 +178,7 @@ def generate_all(config_dir: Path, base_dir: Path):
     tracker += "            }\n"
 
     # ========== 4. 写入 1, 2, 3 版本 ==========
+    # 🔥 核心修改：移除了 CONFIG_FREERTOS_UNICORE: y，释放双核性能！
     base = f"""esphome:
   name: {{name}}
   friendly_name: {{fn}}
@@ -187,7 +188,6 @@ esp32:
   framework:
     type: esp-idf
     sdkconfig_options:
-      CONFIG_FREERTOS_UNICORE: y
       CONFIG_BT_ENABLED: y
       CONFIG_BT_BLE_ENABLED: y
 logger:
@@ -211,7 +211,7 @@ api:
         hex_data: string
       then:
         - lambda: |-
-            id(ct1_ble).send_hex(hex_data);
+            id({{name}}_ble).send_hex(hex_data);
 ota:
   - platform: esphome
 external_components:
@@ -219,7 +219,7 @@ external_components:
       type: local
       path: components
 ble_gateway:
-  id: ct1_ble
+  id: {{name}}_ble
 
 # 🔥 满血蓝牙代理（所有版本统一）
 esp32_ble:
@@ -237,10 +237,11 @@ bluetooth_proxy:
         (base_dir / fn).write_text(c)
 
     write(f"{PROJECT_PREFIX}1.yaml", base.format(name=f"{PROJECT_PREFIX}1", fn=f"{PROJECT_PREFIX}1 Lite"))
-    write(f"{PROJECT_PREFIX}2.yaml", base.format(name=f"{PROJECT_PREFIX}2", fn=f"{PROJECT_PREFIX}2 Full"), extra='\nmqtt:\n  broker: "192.168.6.88"\n  discovery: true\n  on_message:\n    - topic: "' + PROJECT_PREFIX + '2/ble/send"\n      then:\n        - lambda: |-\n            id(ct1_ble).send_hex(x);\n')
+    write(f"{PROJECT_PREFIX}2.yaml", base.format(name=f"{PROJECT_PREFIX}2", fn=f"{PROJECT_PREFIX}2 Full"), extra=f'\nmqtt:\n  broker: "192.168.6.88"\n  discovery: true\n  on_message:\n    - topic: "{PROJECT_PREFIX}2/ble/send"\n      then:\n        - lambda: |-\n            id({PROJECT_PREFIX}2_ble).send_hex(x);\n')
     write(f"{PROJECT_PREFIX}3.yaml", base.format(name=f"{PROJECT_PREFIX}3", fn=f"{PROJECT_PREFIX}3 Custom"))
 
     # ========== 5. 4 版本 (Pro) ==========
+    # 🔥 核心修改：同样移除了 CONFIG_FREERTOS_UNICORE: y
     ct4_header = f"""esphome:
   name: {PROJECT_PREFIX}4
   friendly_name: {PROJECT_PREFIX}4 Pro
@@ -255,7 +256,6 @@ esp32:
   framework:
     type: esp-idf
     sdkconfig_options:
-      CONFIG_FREERTOS_UNICORE: y
       CONFIG_BT_ENABLED: y
       CONFIG_BT_BLE_ENABLED: y
 logger:
@@ -279,7 +279,7 @@ api:
         hex_data: string
       then:
         - lambda: |-
-            id(ct1_ble).send_hex(hex_data);
+            id({PROJECT_PREFIX}4_ble).send_hex(hex_data);
   on_client_connected:
     - script.stop: offline_flash
     - light.turn_off: white_led
@@ -322,7 +322,7 @@ external_components:
       type: local
       path: components
 ble_gateway:
-  id: ct1_ble
+  id: {PROJECT_PREFIX}4_ble
 """
     
     ct4_leds = [
@@ -392,7 +392,7 @@ ble_gateway:
     
     (base_dir / f"{PROJECT_PREFIX}4.yaml").write_text(c4)
 
-    print(f"✅ All 4 YAML files ({PROJECT_PREFIX}1~4.yaml) generated successfully with unified Bluetooth Proxy and send_raw_hex service.")
+    print(f"✅ All 4 YAML files ({PROJECT_PREFIX}1~4.yaml) generated successfully in DUAL-CORE mode with unified Bluetooth Proxy and send_raw_hex service.")
 
 if __name__ == "__main__":
     base = Path(__file__).resolve().parent
