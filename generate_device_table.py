@@ -145,32 +145,29 @@ def generate_all(config_dir: Path, base_dir: Path):
         tracker += "                    break;\n                }\n"
 
     if dev_134d:
-        tracker += """
-                // === Protocol 134D ===
-"""
-        for dev in dev_134d:
-            sid = dev["id"].replace(".", "_")
-            mac_bytes = dev["mac"].split(":")
-            mac_array = "{" + ", ".join([f"0x{b}" for b in reversed(mac_bytes)]) + "}"
             tracker += f"""
                 uint8_t target_mac_{sid}[6] = {mac_array};
                 for (int i = 2; i <= (int)raw.size() - 6; i++) {{
                     if (memcmp(&raw[i], target_mac_{sid}, 6) == 0) {{
                         bool power_on = (raw[i + 7] == 0x01);
-                        uint16_t brt_raw_val = (raw[i + 12] << 8) | raw[i + 13];
-                        int brt_pct = (brt_raw_val == 0xFFFF) ? 100 : (int)(brt_raw_val / 655.35);
-                        uint8_t state_byte = raw[i + 14];
-                        bool fan_running = (state_byte == 0x13 || state_byte == 0x03);
-                        uint8_t fan_gear = raw[i + 15];
-                        int fan_speed = fan_running ? (fan_gear + 1) : 0;
+                        // 亮度：raw[i+12]
+                        int brt_pct = (int)(raw[i + 12] / 255.0f * 100.0f);
+                        // 色温：raw[i+13]
+                        int ct_pct = (int)(raw[i + 13] / 255.0f * 100.0f);
+                        int ct_kelvin = 2700 + (6500 - 2700) * ct_pct / 100;
+                        // 🔥 风扇状态：raw[i+16]（0x10=关, 0x11=开）
+                        uint8_t fan_state = raw[i + 16];
+                        bool fan_running = (fan_state != 0x10);
+                        // 🔥 风扇档位：raw[i+17]（0~5 → 1~6档）
+                        int fan_speed = fan_running ? (raw[i + 17] + 1) : 0;
                         std::string fan_dir_str = fan_running ? "Forward" : "Off";
 
                         id({sid}_led_state).publish_state(power_on);
                         id({sid}_brightness).publish_state(brt_pct);
+                        id({sid}_color_temp).publish_state(ct_kelvin);
                         id({sid}_fan_state).publish_state(fan_running);
                         id({sid}_fan_speed).publish_state(fan_speed);
                         id({sid}_fan_direction).publish_state(fan_dir_str);
-                        id({sid}_color_temp).publish_state(0);
                         id({sid}_timer).publish_state(0);
                         break;
                     }}
