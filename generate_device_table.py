@@ -145,6 +145,13 @@ def generate_all(config_dir: Path, base_dir: Path):
         tracker += "                    break;\n                }\n"
 
     if dev_134d:
+        tracker += """
+                // === Protocol 134D ===
+"""
+        for dev in dev_134d:
+            sid = dev["id"].replace(".", "_")
+            mac_bytes = dev["mac"].split(":")
+            mac_array = "{" + ", ".join([f"0x{b}" for b in reversed(mac_bytes)]) + "}"
             tracker += f"""
                 uint8_t target_mac_{sid}[6] = {mac_array};
                 for (int i = 2; i <= (int)raw.size() - 6; i++) {{
@@ -155,10 +162,10 @@ def generate_all(config_dir: Path, base_dir: Path):
                         // 色温：raw[i+13]
                         int ct_pct = (int)(raw[i + 13] / 255.0f * 100.0f);
                         int ct_kelvin = 2700 + (6500 - 2700) * ct_pct / 100;
-                        // 🔥 风扇状态：raw[i+16]（0x10=关, 0x11=开）
+                        // 风扇状态：raw[i+16]（0x10=关, !=0x10=开）
                         uint8_t fan_state = raw[i + 16];
                         bool fan_running = (fan_state != 0x10);
-                        // 🔥 风扇档位：raw[i+17]（0~5 → 1~6档）
+                        // 风扇档位：raw[i+17]（0~5 → 1~6档）
                         int fan_speed = fan_running ? (raw[i + 17] + 1) : 0;
                         std::string fan_dir_str = fan_running ? "Forward" : "Off";
 
