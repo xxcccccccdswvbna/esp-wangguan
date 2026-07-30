@@ -156,16 +156,20 @@ def generate_all(config_dir: Path, base_dir: Path):
                 uint8_t target_mac_{sid}[6] = {mac_array};
                 for (int i = 2; i <= (int)raw.size() - 6; i++) {{
                     if (memcmp(&raw[i], target_mac_{sid}, 6) == 0) {{
-                        bool power_on = (raw[i + 7] == 0x01);
                         // 亮度：raw[i+12]
                         int brt_pct = (int)(raw[i + 12] / 255.0f * 100.0f);
                         // 色温：raw[i+13]
                         int ct_pct = (int)(raw[i + 13] / 255.0f * 100.0f);
                         int ct_kelvin = 2700 + (6500 - 2700) * ct_pct / 100;
-                        // 风扇状态：raw[i+16]（0x10=关, !=0x10=开）
+                        
+                        // 🔥 终极修正 1：灯开关 = 亮度 > 0 (最稳妥，无视协议字节变化)
+                        bool power_on = (brt_pct > 0);
+                        
+                        // 🔥 终极修正 2：风扇状态用位运算 (0x10->0, 0x11->1)
                         uint8_t fan_state = raw[i + 16];
-                        bool fan_running = (fan_state != 0x10);
-                        // 风扇档位：raw[i+17]（0~5 → 1~6档）
+                        bool fan_running = (fan_state & 0x01) != 0;
+                        
+                        // 风扇档位：raw[i+17]（0~5 → 1~6档），如果风扇关则强制为0
                         int fan_speed = fan_running ? (raw[i + 17] + 1) : 0;
                         std::string fan_dir_str = fan_running ? "Forward" : "Off";
 
