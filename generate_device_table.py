@@ -4,7 +4,7 @@ import glob
 from pathlib import Path
 
 # 🔥 核心配置区：在这里修改基础名字 (确保整个文件只有这一处)
-PROJECT_PREFIX = "yy"
+PROJECT_PREFIX = "ct"
 
 def clean_hex(hex_str):
     return str(hex_str).strip().replace(" ", "").replace("0x", "").replace("0X", "").upper()
@@ -148,6 +148,10 @@ def generate_all(config_dir: Path, base_dir: Path):
         tracker += """
                 // === Protocol 134D ===
 """
+    if dev_134d:
+        tracker += """
+                // === Protocol 134D ===
+"""
         for dev in dev_134d:
             sid = dev["id"].replace(".", "_")
             mac_bytes = dev["mac"].split(":")
@@ -156,23 +160,23 @@ def generate_all(config_dir: Path, base_dir: Path):
                 uint8_t target_mac_{sid}[6] = {mac_array};
                 for (int i = 2; i <= (int)raw.size() - 6; i++) {{
                     if (memcmp(&raw[i], target_mac_{sid}, 6) == 0) {{
-                        // 亮度：raw[i+12]
+                        // 1. 亮度与色温：保持验证正确的单字节解析 (0-255 映射)
                         int brt_pct = (int)(raw[i + 12] / 255.0f * 100.0f);
-                        // 色温：raw[i+13]
                         int ct_pct = (int)(raw[i + 13] / 255.0f * 100.0f);
                         int ct_kelvin = 2700 + (6500 - 2700) * ct_pct / 100;
                         
-                        // 🔥 终极修正 1：灯开关 = 亮度 > 0 (最稳妥，无视协议字节变化)
-                        bool power_on = (brt_pct > 0);
+                        // 2. 🔥 灯的开关：严格依赖 raw[i+7]，坚决不用亮度兜底，防止关灯误判为开！
+                        bool power_on = (raw[i + 7] == 0x01);
                         
-                        // 🔥 终极修正 2：风扇状态用位运算 (0x10->0, 0x11->1)
+                        // 3. 🔥 风扇状态：保留验证正确的位运算逻辑 (0x10->0, 0x11->1)
                         uint8_t fan_state = raw[i + 16];
                         bool fan_running = (fan_state & 0x01) != 0;
                         
-                        // 风扇档位：raw[i+17]（0~5 → 1~6档），如果风扇关则强制为0
+                        // 4. 风扇档位：raw[i+17]（0~5 → 1~6档），关则强制为0
                         int fan_speed = fan_running ? (raw[i + 17] + 1) : 0;
                         std::string fan_dir_str = fan_running ? "Forward" : "Off";
 
+                        // 5. 发布状态到实体
                         id({sid}_led_state).publish_state(power_on);
                         id({sid}_brightness).publish_state(brt_pct);
                         id({sid}_color_temp).publish_state(ct_kelvin);
