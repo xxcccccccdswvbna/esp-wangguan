@@ -3,7 +3,7 @@ import os
 import glob
 from pathlib import Path
 
-# 🔥 核心配置区：在这里修改基础名字 (确保整个文件只有这一处)
+# 🔥 核心配置区：在这里修改基础名字 (确保整个文件只有这一处) 
 PROJECT_PREFIX = "ct"
 
 def clean_hex(hex_str):
