@@ -2,5 +2,11 @@
   "id": "device.zzw",
   "name": "主卧风扇灯",
   "mac": "00:00:70:35:26:92",
-  "protocol": "8153"
+  "protocol": "MIDEA",
+  "light": {
+    "id": "light.zzw"
+  },
+  "fan": {
+    "id": "fan.zzw"
+  }
 }
